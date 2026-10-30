@@ -8,21 +8,17 @@
 #include <unistd.h>
 
 #include "font_1608.h"
-#include "gpio_bb.h"
+#include "spi_hw.h"
 #include "lcd.h"
 
 void write_comm(uint8_t data)
 {
-    bb_cs_set(0);
-    bb_write_bits((uint32_t)data, 9); /* D/C bit 0 = command */
-    bb_cs_set(1);
+    spi_cmd(data);
 }
 
 void write_data8(uint8_t data)
 {
-    bb_cs_set(0);
-    bb_write_bits(0x100u | data, 9);  /* D/C bit 1 = data */
-    bb_cs_set(1);
+    spi_data8(data);
 }
 
 void write_data16(uint16_t data)
@@ -33,19 +29,18 @@ void write_data16(uint16_t data)
 
 void lcd_begin_data(void)
 {
-    bb_cs_set(0);
+    spi_stream_begin();
 }
 
 void lcd_end_data(void)
 {
-    bb_cs_set(1);
+    spi_stream_end();
 }
 
 /* stream one 16bpp word as two 9-bit frames with CS held low */
 static void put_pixel_word(uint16_t v)
 {
-    bb_write_bits(0x100u | (uint32_t)(v >> 8), 9);
-    bb_write_bits(0x100u | (uint32_t)(v & 0xFF), 9);
+    spi_stream_word(v);
 }
 
 static void delay_ms(int ms)
@@ -55,11 +50,11 @@ static void delay_ms(int ms)
 
 void lcd_reset(void)
 {
-    bb_res_set(1);
+    spi_res_set(1);
     delay_ms(50);
-    bb_res_set(0);
+    spi_res_set(0);
     delay_ms(200);
-    bb_res_set(1);
+    spi_res_set(1);
     delay_ms(200);
 }
 

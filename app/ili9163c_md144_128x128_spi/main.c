@@ -12,7 +12,7 @@
 #include <stdlib.h>
 #include <time.h>
 
-#include "gpio_bb.h"
+#include "spi_hw.h"
 #include "lcd.h"
 
 static double now_s(void)
@@ -25,15 +25,14 @@ static double now_s(void)
 
 static void usage(void)
 {
-    printf("usage: ili9163c_demo [-c cs] [-k sclk] [-m mosi] [-r res] "
-           "[-s us_per_bit]\n");
+    printf("usage: ili9163c_demo [-c cs] [-r res] [-s speed_kHz]\n");
 }
 
 int main(int argc, char **argv)
 {
     double t0, t1;
-    int cs = 7, scl = 1, sda = 3, res = 49, slow = 0;
-    int gs, gd, gc, gb, gdc, gr;
+    int cs = 7, res = 49;
+    unsigned int speed_hz = 8000000;
 
     setvbuf(stdout, NULL, _IONBF, 0);
 
@@ -44,10 +43,8 @@ int main(int argc, char **argv)
             switch (argv[i][1])
             {
             case 'c': cs  = atoi(argv[++i]); break;
-            case 'k': scl = atoi(argv[++i]); break;
-            case 'm': sda = atoi(argv[++i]); break;
             case 'r': res = atoi(argv[++i]); break;
-            case 's': slow = atoi(argv[++i]); break;
+            case 's': speed_hz = (unsigned)atoi(argv[++i]) * 1000; break;
             default:  usage(); return 1;
             }
         }
@@ -58,18 +55,14 @@ int main(int argc, char **argv)
         }
     }
 
-    bb_configure(scl, sda, cs, -1, -1, res);
-    if (slow > 0)
-        bb_slow(slow);
-
-    if (bb_open() != 0)
+    if (spi_open(speed_hz) != 0)
         return 1;
-    bb_get_pins(&gs, &gd, &gc, &gb, &gdc, &gr);
+    spi_res_open(res);
 
-    printf("ILI9163C MD144 128x128, 3-wire 9-bit frames, bit-bang:\n"
-           "  SCL=gpio%d(JP4.23) SDA=gpio%d(JP4.19) CS=gpio%d(JP4.24) "
-           "RES=gpio%d(JP4.29) slow=%dus/bit\n",
-           gs, gd, gc, gr, slow);
+    printf("ILI9163C MD144 128x128, hardware SPI0 (spidev) @ %u Hz:\n"
+           "  CS=gpio%d(JP4.24 hw CSN0) RES=gpio%d(JP4.29)\n"
+           "  SCL=JP4.23 MOSI=JP4.19 (hw pins), 9-bit frames\n",
+           speed_hz, cs, res);
 
     t0 = now_s();
     lcd_init(); /* reset + init + black clear */
@@ -97,6 +90,6 @@ int main(int argc, char **argv)
     lcd_draw_string(8, 112, "RK3506 128x128", YELLOW, BLACK);
 
     printf("done - screen keeps the last frame\n");
-    bb_close();
+    spi_close();
     return 0;
 }
