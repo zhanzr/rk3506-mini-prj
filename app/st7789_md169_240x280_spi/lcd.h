@@ -29,6 +29,8 @@
 #define YELLOW  0xFFE0
 
 void lcd_init(void);
+void lcd_init_slow(int slow_us_per_bit);
+void lcd_set_inversion(int on);
 void lcd_reset(void);
 void lcd_set_address(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2);
 void write_comm(uint16_t data);

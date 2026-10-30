@@ -58,71 +58,127 @@ void lcd_reset(void)
     delay_ms(200);
 }
 
-/* ST7789V/T3 (MD169), from the c542 board_t1 st7789 bsp */
+static int g_invon = 1;
+
+void lcd_set_inversion(int on)
+{
+    g_invon = on;
+}
+
+/* ST7789 (MD169 v3) init - VERBATIM from the module vendor's own driver
+ * (module_db module-st7789-v3-240x280-1_69, vendor_doc/module_8pin/
+ * stm32f1_ex/APP/tftlcd/tftlcd.c, TFT==169 branch). Values differ
+ * significantly from the f411/c542 sequences. */
 void lcd_ic_init(void)
 {
-    write_comm(0x11);             /* Sleep out */
+    write_comm(0x36);             /* MADCTL */
+    if (1)
+        write_data(0x00);
+    write_comm(0x01);             /* Software Reset */
     delay_ms(120);
 
-    write_comm(0x36);             /* MADCTL */
+    write_comm(0x11);             /* Sleep Out */
+    delay_ms(120);
+    /*------------------- ST7789V frame rate setting ------------------*/
+    write_comm(0x3A);             /* 65k mode, 16bpp */
+    write_data(0x05);
+    write_comm(0xC5);             /* VCOM */
+    write_data(0x1A);
+
+    write_comm(0xB2);             /* Porch Setting */
+    write_data(0x05);
+    write_data(0x05);
     write_data(0x00);
-    write_comm(0x3A);             /* COLMOD 16bpp */
-    write_data(0x55);
-    write_comm(0x21);             /* INVON - IPS panel, inverted colors */
+    write_data(0x33);
+    write_data(0x33);
 
-    write_comm(0xB2);             /* PORCTRL */
-    write_data(0x0C); write_data(0x0C); write_data(0x00);
-    write_data(0x33); write_data(0x33);
+    write_comm(0xB7);             /* Gate Control */
+    write_data(0x05);             /* 12.2v  -10.43v */
+    /*------------------- ST7789V power setting -----------------------*/
+    write_comm(0xBB);             /* VCOM */
+    write_data(0x3F);
 
-    write_comm(0xBB);             /* VCOMS */
-    write_data(0x1F);
+    write_comm(0xC0);             /* Power control */
+    write_data(0x2C);
 
-    write_comm(0xC2);             /* VDVVRHEN */
+    write_comm(0xC2);             /* VDV and VRH Command Enable */
     write_data(0x01);
 
-    write_comm(0xC3);             /* VRHS */
+    write_comm(0xC3);             /* VRH Set */
+    write_data(0x0F);             /* 4.3+(vcom+vcom offset+vdv) */
+
+    write_comm(0xC4);             /* VDV Set */
+    write_data(0x20);             /* 0v */
+
+    write_comm(0xC6);             /* Frame Rate Control, Normal Mode */
+    write_data(0x01);             /* 111 Hz */
+
+    write_comm(0xD0);             /* Power Control 1 */
+    write_data(0xA4);
+    write_data(0xA1);
+
+    write_comm(0xE8);             /* Power Control 1 */
+    write_data(0x03);
+
+    write_comm(0xE9);             /* Equalize time control */
+    write_data(0x09);
+    write_data(0x09);
+    write_data(0x08);
+    /*------------------- ST7789V gamma setting -----------------------*/
+    write_comm(0xE0);             /* Set Gamma */
+    write_data(0xD0);
+    write_data(0x05);
+    write_data(0x09);
+    write_data(0x09);
+    write_data(0x08);
+    write_data(0x14);
+    write_data(0x28);
+    write_data(0x33);
+    write_data(0x3F);
+    write_data(0x07);
     write_data(0x13);
+    write_data(0x14);
+    write_data(0x28);
+    write_data(0x30);
 
-    write_comm(0xC4);             /* VDVS */
-    write_data(0x20);
+    write_comm(0xE1);             /* Set Gamma */
+    write_data(0xD0);
+    write_data(0x05);
+    write_data(0x09);
+    write_data(0x09);
+    write_data(0x08);
+    write_data(0x03);
+    write_data(0x24);
+    write_data(0x32);
+    write_data(0x32);
+    write_data(0x3B);
+    write_data(0x14);
+    write_data(0x13);
+    write_data(0x28);
+    write_data(0x2F);
 
-    write_comm(0xC5);             /* VCOM offset */
-    write_data(0x00);
+    if (g_invon)
+        write_comm(0x21);         /* INVON */
 
-    write_comm(0xC6);             /* FRCTRL2 */
-    write_data(0x0F);
-
-    write_comm(0xD0);             /* PWCTRL1 */
-    write_data(0xA4); write_data(0xA1);
-
-    write_comm(0xE0);             /* PVGAMCTRL */
-    write_data(0xD0); write_data(0x0A); write_data(0x10); write_data(0x0A);
-    write_data(0x0A); write_data(0x26); write_data(0x36); write_data(0x34);
-    write_data(0x4D); write_data(0x18); write_data(0x13); write_data(0x14);
-    write_data(0x2F); write_data(0x34);
-
-    write_comm(0xE1);             /* NVGAMCTRL */
-    write_data(0xD0); write_data(0x0A); write_data(0x10); write_data(0x0A);
-    write_data(0x09); write_data(0x26); write_data(0x36); write_data(0x53);
-    write_data(0x4C); write_data(0x18); write_data(0x14); write_data(0x14);
-    write_data(0x2F); write_data(0x34);
-
-    write_comm(0x2A);             /* CASET 0..239 */
-    write_data(0x00); write_data(0x00); write_data(0x00); write_data(0xEF);
-
-    write_comm(0x2B);             /* RASET (vendor default) */
-    write_data(0x00); write_data(0x00); write_data(0x00); write_data(0xEF);
-
+    delay_ms(120);
+    write_comm(0x11);             /* Sleep Out */
+    delay_ms(120);
     write_comm(0x29);             /* Display on */
     delay_ms(120);
 }
 
 void lcd_init(void)
 {
-    bb_bl_set(1);      /* attempt backlight (needs DTB fix on stock image) */
+    bb_bl_set(1);      /* attempt backlight */
     lcd_reset();
     lcd_ic_init();
     disp_color(BLACK);
+}
+
+void lcd_init_slow(int slow_us_per_bit)
+{
+    bb_slow(slow_us_per_bit);
+    lcd_init();
 }
 
 /* Set the pixel window using the panel's pre-offsets, then leave

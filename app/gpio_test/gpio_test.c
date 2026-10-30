@@ -1,20 +1,21 @@
 /*
  * gpio_test - toggle JP4 GPIO pins one by one so a LED module (wired in
- * the LCM's place) can verify every pin.
+ * the LCM's place) can verify every signal.
  *
- * Also fixes the RK3506 RM_IO trap: JP4.19/21/23/24/15 are GPIO0 bank-0
- * pins ("RM_IO" pins). Their 4-bit IOMUX (grf_pmu @ 0xff910000) may not
- * default to GPIO (mux 0), in which case plain GPIO writes never reach
- * the pin - which is why the bit-bang LCM showed nothing. For the free
- * pins this program sets the IOMUX nibble back to 0 (GPIO) via /dev/mem
- * (same write the pinctrl driver would do: value in low halfword,
- * write-enable mask in high halfword), then blinks each pin.
+ * Default sequence: the LCM signals (SCLK, MOSI, RESET, DC, CS, CS-alt),
+ * 4 s each, then an ALL-blink phase where all pins toggle together for
+ * 4 s. Loops forever; --once exits after one pass; --all additionally
+ * walks the remaining free and the peripheral-claimed pins.
+ *
+ * Also fixes the RK3506 RM_IO trap: bank0 pins are "RM_IO" pins whose
+ * IOMUX (grf_pmu @ 0xff910000) must be 0 (GPIO) for gpio writes to reach
+ * the pin. On this image they were already 0x0 (verified 2026-10-30);
+ * the force-write is kept as a safety/idempotent step.
  *
  * Usage:
- *   gpio_test            # blink the free JP4 pins, one by one, forever
+ *   gpio_test            # LCM order + all-blink, loop forever
  *   gpio_test --once     # one pass, then exit
- *   gpio_test --all      # include pins claimed by enabled peripherals
- *                        # (those will NOT toggle - muxed to CAN/UART/SAI)
+ *   gpio_test --all      # also walk remaining free + claimed pins
  */
 #include <errno.h>
 #include <fcntl.h>
@@ -29,32 +30,36 @@
 
 #define GRF_PMU_BASE 0xff910000ull /* bank0 IOMUX rows + RMIO matrix */
 
-#define BIT_SPACING_US 400000 /* 1.25 Hz toggle - easy to probe */
+#define PIN_SECONDS 4    /* per-pin blink time */
+#define ALL_SECONDS 4    /* all-blink time at end of each loop */
 
 struct pin {
     int jp4;
     int gpio;      /* linux gpio number */
     int bank, pin; /* SoC coordinates */
-    const char *net;
+    const char *name;
     const char *owner; /* NULL = free in the stock image */
 };
 
-/* free in the stock image (mux forced to GPIO for bank0 RM_IO pins) */
+/* the LCM signals in test order (CS twice: both wiring variants) */
+static const struct pin pins_lcm[] = {
+    { 23, 1, 0, 1, "SCLK", NULL },
+    { 19, 3, 0, 3, "MOSI", NULL },
+    { 29, 49, 1, 17, "RESET", NULL },
+    { 33, 47, 1, 15, "DC", NULL },
+    { 31, 48, 1, 16, "CS (JP4.31 variant)", NULL },
+    { 24, 7, 0, 7, "CS (JP4.24 variant / SPI0_CSN0)", NULL },
+};
+
+/* remaining free pins (--all) */
 static const struct pin pins_free[] = {
-    { 23, 1, 0, 1, "SPI0_CLK", NULL },
-    { 19, 3, 0, 3, "SPI0_MOSI", NULL },
-    { 21, 6, 0, 6, "SPI0_MISO", NULL },
-    { 24, 7, 0, 7, "SPI0_CSN0", NULL },
+    { 21, 6, 0, 6, "MISO (unused by write-only LCM)", NULL },
     { 15, 13, 0, 13, "GPIO0_B5 (LCM BLK)", NULL },
-    { 29, 49, 1, 17, "GPIO1_C1 (OLED RES)", NULL },
-    { 33, 47, 1, 15, "GPIO1_B7 (OLED DC)", NULL },
-    { 31, 48, 1, 16, "GPIO1_C0", NULL },
     { 37, 45, 1, 13, "GPIO1_B5", NULL },
     { 35, 46, 1, 14, "GPIO1_B6", NULL },
 };
 
-/* claimed by enabled peripherals - toggling the gpio will not reach the
- * pin unless the peripheral is disabled in the DT */
+/* claimed by enabled peripherals - expected not to toggle */
 static const struct pin pins_claimed[] = {
     { 7, 8, 0, 8, "GPIO0_B0", "SAI1_MCLK (codec)" },
     { 11, 9, 0, 9, "GPIO0_B1", "SAI1_SCLK (codec)" },
@@ -97,75 +102,121 @@ static int rmio_pin_force_gpio(int pin)
     return 0;
 }
 
-static int gpio_blink(int gpio, int seconds)
+struct handle {
+    const struct pin *p;
+    int fd, hfd;
+    unsigned bit;
+};
+
+static int handle_open(struct handle *h)
 {
     char dev[32];
-    int fd;
-    struct gpio_v2_line_request req;
+    const struct pin *p = h->p;
 
-    snprintf(dev, sizeof(dev), "/dev/gpiochip%d", gpio / 32);
-    fd = open(dev, O_RDWR | O_CLOEXEC);
-    if (fd < 0)
+    snprintf(dev, sizeof(dev), "/dev/gpiochip%d", p->gpio / 32);
+    h->fd = open(dev, O_RDWR | O_CLOEXEC);
+    if (h->fd < 0)
     {
         printf("    open %s: %s\n", dev, strerror(errno));
         return -1;
     }
-    memset(&req, 0, sizeof(req));
-    req.offsets[0] = gpio % 32;
-    req.num_lines = 1;
-    req.config.flags = GPIO_V2_LINE_FLAG_OUTPUT;
-    snprintf(req.consumer, sizeof(req.consumer), "gpio_test");
-    if (ioctl(fd, GPIO_V2_GET_LINE_IOCTL, &req) < 0)
     {
-        printf("    request: %s\n", strerror(errno));
-        close(fd);
-        return -1;
-    }
-    {
-        struct gpio_v2_line_values vals;
-        int on = 0;
+        struct gpio_v2_line_request req;
 
-        vals.mask = 1;
-        for (int i = 0; i < seconds * 2; i++)
+        memset(&req, 0, sizeof(req));
+        req.offsets[0] = (unsigned int)(p->gpio % 32);
+        req.num_lines = 1;
+        req.config.flags = GPIO_V2_LINE_FLAG_OUTPUT;
+        snprintf(req.consumer, sizeof(req.consumer), "gpio_test");
+        if (ioctl(h->fd, GPIO_V2_GET_LINE_IOCTL, &req) < 0)
         {
-            on = !on;
-            vals.bits = on ? 1 : 0;
-            ioctl(req.fd, GPIO_V2_LINE_SET_VALUES_IOCTL, &vals);
-            usleep(BIT_SPACING_US);
+            printf("    request: %s\n", strerror(errno));
+            close(h->fd);
+            h->fd = -1;
+            return -1;
         }
+        h->hfd = req.fd;
+        h->bit = 1u;
     }
-    close(req.fd);
-    close(fd);
     return 0;
 }
 
-static void test_set(const struct pin *pins, int n, int once)
+static void handle_set(struct handle *h, int on)
 {
-    for (int i = 0;; i = (i + 1) % n)
+    struct gpio_v2_line_values vals;
+
+    vals.mask = h->bit;
+    vals.bits = on ? h->bit : 0;
+    ioctl(h->hfd, GPIO_V2_LINE_SET_VALUES_IOCTL, &vals);
+}
+
+static void handle_close(struct handle *h)
+{
+    if (h->hfd >= 0) close(h->hfd);
+    if (h->fd >= 0) close(h->fd);
+    h->hfd = h->fd = -1;
+}
+
+static void test_set(const struct pin *pins, int n, int do_all_blink)
+{
+    struct handle h[16];
+
+    for (int i = 0; i < n; i++)
     {
         const struct pin *p = &pins[i];
 
-        printf("\n==> JP4.%d  gpio%-3d  %s", p->jp4, p->gpio, p->net);
+        printf("\n==> %s  (JP4.%d  gpio%-3d)", p->name, p->jp4, p->gpio);
         if (p->owner)
             printf("   [claimed by %s - expected NOT to toggle]", p->owner);
         printf("\n");
 
-        /* bank0 pins 0..23 are RM_IO pins: force mux 0 (GPIO) unless the
-         * pin is owned by an enabled peripheral */
         if (p->bank == 0 && p->pin < 24 && !p->owner)
             rmio_pin_force_gpio(p->pin);
 
-        gpio_blink(p->gpio, 3);
+        h[i].p = p;
+        if (handle_open(&h[i]) != 0)
+        {
+            h[i].hfd = h[i].fd = -1;
+            continue;
+        }
+
+        {
+            int on = 0;
+
+            for (int t = 0; t < PIN_SECONDS * 2; t++)
+            {
+                on = !on;
+                handle_set(&h[i], on);
+                usleep(400000);
+            }
+        }
         printf("    done\n");
-        if (once && i == n - 1)
-            break;
     }
+
+    if (do_all_blink)
+    {
+        printf("\n==> ALL-blink: all %d pins toggling together (%d s)\n",
+               n, ALL_SECONDS);
+        for (int t = 0; t < ALL_SECONDS * 2; t++)
+        {
+            int on = t & 1;
+
+            for (int i = 0; i < n; i++)
+                if (h[i].hfd >= 0)
+                    handle_set(&h[i], on);
+            usleep(400000);
+        }
+        printf("    all-blink done\n");
+    }
+
+    for (int i = 0; i < n; i++)
+        if (h[i].fd >= 0)
+            handle_close(&h[i]);
 }
 
 int main(int argc, char **argv)
 {
     int all = (argc > 1 && strcmp(argv[1], "--all") == 0);
-    int once = (argc > 1 && strcmp(argv[1], "--once") == 0);
     int fd;
 
     setvbuf(stdout, NULL, _IONBF, 0);
@@ -184,13 +235,16 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    printf("gpio_test: JP4 pin walker (LED module in the LCM socket)\n");
+    printf("gpio_test: LCM signals (SCLK, MOSI, RESET, DC, CS x2), "
+           "%d s per pin + all-blink\n", PIN_SECONDS);
+    test_set(pins_lcm, (int)(sizeof(pins_lcm) / sizeof(pins_lcm[0])), 1);
     if (all)
+    {
+        test_set(pins_free,
+                 (int)(sizeof(pins_free) / sizeof(pins_free[0])), 1);
         test_set(pins_claimed,
-                 (int)(sizeof(pins_claimed) / sizeof(pins_claimed[0])),
-                 once);
-    test_set(pins_free, (int)(sizeof(pins_free) / sizeof(pins_free[0])),
-             once);
+                 (int)(sizeof(pins_claimed) / sizeof(pins_claimed[0])), 0);
+    }
     printf("\nall pins done\n");
     return 0;
 }

@@ -18,7 +18,10 @@ push: $(TARGET)
 run:
 	ssh -t $(BOARD) "cd $(BOARD_DIR) && ./$(TARGET)"
 
+matrix:
+	ssh -t $(BOARD) "cd $(BOARD_DIR) && for cs in 7 48; do for ex in '' -f; do for sw in '' -S; do echo \"=== CS=$$cs extra='\$$ex \$$sw' ===\"; timeout 30 ./st7789_demo -c $$cs -1 $$ex $$sw; sleep 1; done; done; done"
+
 clean:
 	rm -f $(TARGET)
 
-.PHONY: all push run clean
+.PHONY: all push run matrix clean
