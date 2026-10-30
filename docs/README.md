@@ -7,6 +7,8 @@ Setup and design notes for the rk3506-mini project.
 | `dts_adc_notes.md` | Verified device-tree structure (rk3506.dtsi / rk3502.dtsi, vanxoak board dts), TSADC die sensor, SARADC wiring (jumpers only, no external channels), CPU clock facts (3x A7 fixed 1.2 GHz, no cpufreq) |
 | `cpu_clock_dvfs.md` | Why the board runs at 1.2 GHz although the datasheet claims 1.5 GHz: vendor DTS never enables the PWM behind vdd_arm (CPU regulator), rockchip-cpufreq fails at boot and gives up; OPP table / chip grade details; fix sketch + risks |
 | `amp_m0_notes.md` | How to program the Cortex-M0 (AMP): HAL / RT-Thread projects, FIT packaging, U-Boot bring-up, kernel resources; current SD image has no AMP support (verified) |
+| `graphics_stack_notes.md` | Verified graphics stack: no desktop/WM, LVGL 9.1-on-DRM via RKADK, stock fonts/icons inventory (LVGL built-ins, SmileySans TTF, boot logos), what the 7" MIPI screen shows on stock boot (static logo only - all boot hooks verified) |
+| `jp4_spi_lcm.md` | 4-line SPI LCM pin mapping on JP4 (SPI0 via rm_io1/3/6, DC/CS on free bank1 GPIOs, BLK hardware PWM on rm_io7), RM_IO pin budget vs enabled peripherals, required DTB additions + interim options |
 
 Vendor manuals (PDFs, schematics, pin lists) are kept in
 `D:\board_database\rk3506-mini` and are not part of this repository.
