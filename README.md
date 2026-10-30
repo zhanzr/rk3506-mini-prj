@@ -1,0 +1,121 @@
+# rk3506-mini Software Repository
+
+Development repository for the Vanxoak HD-RK3506G-CORE / HD-RK3506-EVB
+mini board (Rockchip RK3506G: 3x Cortex-A7 + Cortex-M0, no on-board flash -
+boots from TF card, Buildroot Linux).
+
+Board OS: vendor Buildroot image, kernel `6.1.118`
+(`/etc/os-release`: `linux-6.1-stan-rkr4.3`), ~98 MB RAM, 3 A7 cores visible
+to Linux, TF-card rootfs. The Cortex-M0 is used by the vendor AMP/RT-Thread
+firmware (not exercised by this repo yet).
+
+![rk3506-mini board](board_images/board_0.jpg)
+
+## Board connection (verified working)
+
+Ethernet on ETH1 (YT8512C PHY). The stock image brings the interface up with
+**two addresses at once**: vendor static `192.168.1.12` (different subnet,
+not routable from a 192.168.5.x LAN) plus a **DHCP address** on the real
+network. DHCP wins in practice - the board has been seen on
+`192.168.5.196` and `192.168.5.198` (it flips after reboots/lease renewals).
+
+- WSL: `~/.ssh/config` has a `rk3506-buildroot` Host alias pointing at the
+  current IP; login `root` / password `root`, plus the host key of this
+  machine installed in `/root/.ssh/authorized_keys` (passwordless).
+  If the board becomes unreachable, run `tools/find_board.sh` (rescans the
+  /24, identifies the board by hostname and rewrites the alias).
+- Windows: add the same IP to `C:\Windows\System32\drivers\etc\hosts` as
+  `rk3506-buildroot` to use plain `ssh rk3506-buildroot` there (currently
+  **not** done - WSL is the development environment).
+- Serial: DEBUG-TTL header, 115200 8N1 (COM7 on this PC) - rescue access
+  when the network is gone.
+- USB1 (Type-C) supports adb (`adb_login.pdf` in the vendor folder) and
+  USB flashing via RKDevTool / DriverAssistant (also in the vendor folder).
+
+Vendor docs (PDFs, schematics, SDKs) live in
+`D:\board_database\rk3506-mini` and are **not** part of this repo
+(see `docs/README.md`).
+
+## Toolchain (verified end-to-end)
+
+Buildroot external SDK exported by the vendor:
+`arm-buildroot-linux-gnueabihf_sdk-buildroot-20260326.tar.gz`
+(GCC 12.4.0, glibc, armv7-a NEON-VFPV4 hard-float; sysroot contains the
+board's userspace libraries: liblvgl, librkadk, librockit, librga, libdrm,
+libgpiod, GStreamer, freetype, ...).
+
+Installed in WSL at `~/toolchains/arm-buildroot-linux-gnueabihf_sdk-buildroot`
+(extract + `./relocate-sdk.sh`, done). Source `env.sh` in the repo root to
+put it on PATH. A verified CMake setup (toolchain file) was used to prove
+the flow before the repo switched to per-project Makefiles:
+
+```
+cmake -DCMAKE_TOOLCHAIN_FILE=toolchain.cmake -B build -S . && cmake --build build
+```
+
+Cross build + fast deploy loop (from `app/<project>/`):
+
+```
+make push run
+```
+
+**Gotcha - linking vendor shared libs:** `/usr/lib/liblvgl.so` on the board
+is *not* self-contained; any app linking it must link the whole closure the
+vendor demo uses (see `app/lvgl_demo/CMakeLists.txt` in the SDK):
+`-llvgl -lfreetype -ldrm -levdev -lrockit -lrkadk -lrga -lpthread -lm`.
+Plain POSIX apps (all projects in this repo so far) need nothing special.
+
+Debugging: no cross-gdb in the SDK, no gdbserver on the target - printf
+debugging it is. (Could be added later by enabling `BR2_PACKAGE_GDB` and
+rebuilding the rootfs with the full SDK.)
+
+## On-board LEDs
+
+| LED | GPIO | Kernel LED name | Default role |
+|---|---|---|---|
+| LED1 | - | - | 3.3 V power indicator (hardwired) |
+| LED2 | GPIO0_D0 (= gpio 24) | `run` (`/sys/class/leds/run`) | `heartbeat` trigger |
+
+Control: `echo none > /sys/class/leds/run/trigger` then
+`echo 1|0 > /sys/class/leds/run/brightness`. Everything is root-owned
+mode 644; the board is used as root, so no permission issues.
+
+**Note (verified):** the kernel DT marks the LED **ACTIVE LOW** -
+`/sys/kernel/debug/gpio` shows `gpio-24 ... out lo ACTIVE LOW`, i.e. writing
+`brightness=1` drives the physical pin low to light the LED. The vendor
+README claims "high active" - that refers to the raw pin, not the LED class
+API. Use the LED class API and polarity never matters.
+
+Stealing the heartbeat is harmless: the trigger is purely cosmetic, no
+system code depends on it, and after a reboot the heartbeat comes back.
+`app/blink_hello` restores the previous trigger on exit anyway.
+
+## SoC temperature (verified)
+
+`/sys/class/thermal/thermal_zone0/temp` (millidegrees C, read-only),
+~45 C idle. `app/blink_hello` samples it every blink.
+
+## Serial console
+
+DEBUG-TTL 3-pin: TXD / RXD / GND, 115200 8N1.
+
+## Vendor SDK notes
+
+- `rk3506_linux6.1_sdk_v1.2.0_evb` (in `D:\board_database\rk3506-mini`) is
+  the full build system (kernel/U-Boot/Buildroot/app demos). Only needed to
+  rebuild system images; the board defconfigs are
+  `rockchip_hd_rk3506g_evb_sd_defconfig` (this board) and a `_nand` variant.
+  Best user-space reference inside it: `app/lvgl_demo` (LVGL 8/9 on DRM +
+  rkadk) and `docs/cn|en` (Rockchip documentation).
+- The 40 GB "all source SDK" was **not** downloaded - not needed for
+  application development.
+- The toolchain tarball was exported from the vendor's `nand` variant
+  buildroot output (original path visible in `relocate-sdk.sh` before
+  relocation), but the ABI is identical to the SD image - binaries verified
+  running on the board.
+
+## References
+
+- Vendor folder: `D:\board_database\rk3506-mini` (schematics, pin lists,
+  datasheet, programming guides - see `docs/README.md`)
+- Rockchip RK3506 TRM and SDK docs in the SDK `docs/` tree
