@@ -6,6 +6,8 @@
 # Project binaries (add one line per project)
 /app/hello/hello
 /app/blink_hello/blink_hello
+/app/coremark/coremark-arm
+/app/coremark/coremark-thumb
 
 # Editors / OS
 *.swp

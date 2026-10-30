@@ -2,6 +2,10 @@
 
 Setup and design notes for the rk3506-mini project.
 
+| File | Content |
+|---|---|
+| `dts_adc_notes.md` | Verified device-tree structure (rk3506.dtsi / rk3502.dtsi, vanxoak board dts), TSADC die sensor, SARADC wiring (jumpers only, no external channels), CPU clock facts (3x A7 fixed 1.2 GHz, no cpufreq) |
+
 Vendor manuals (PDFs, schematics, pin lists) are kept in
 `D:\board_database\rk3506-mini` and are not part of this repository.
 

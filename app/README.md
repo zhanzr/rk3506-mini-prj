@@ -7,6 +7,7 @@ self-contained project with its own `Makefile` and `README.md`.
 |---|---|
 | `hello/` | Minimal hello world - proves the cross toolchain + deploy loop |
 | `blink_hello/` | Hello world + LED2 (`/sys/class/leds/run`, heartbeat) blinker + SoC temperature sampling |
+| `coremark/` | EEMBC CoreMark 1.0, ARM and Thumb-2 variants (results in its README) |
 
 ## Common workflow (per project, from the project directory)
 

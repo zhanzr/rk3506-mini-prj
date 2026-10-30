@@ -95,6 +95,39 @@ system code depends on it, and after a reboot the heartbeat comes back.
 `/sys/class/thermal/thermal_zone0/temp` (millidegrees C, read-only),
 ~45 C idle. `app/blink_hello` samples it every blink.
 
+This is the chip's **internal TSADC die sensor** (`tsadc@ff650000`,
+`soc-thermal`), trimmed via OTP, with hardware shutdown configured at
+120 C. No external temperature sensor is involved.
+
+## ADC (verified)
+
+Two separate ADC blocks:
+
+1. **TSADC** - die temperature only (above), not usable for external
+   signals.
+2. **SARADC** (`adc@ff4e8000`, exposed as `/sys/bus/iio/devices/iio:device0`,
+   8 channels `in_voltage0_raw`..`in_voltage7_raw`, 10-bit, VREF = 1.8 V,
+   scale 1.7578125 mV/LSB).
+
+But on **this** board the SARADC is not usable for general purposes - the
+schematic shows:
+
+| Channel | Bonded pin | Baseboard wiring | Idle reading |
+|---|---|---|---|
+| IN0 | `SARADC_IN0_BOOT` | MASKROM jumper H1 (short to GND = maskrom mode) | ~1.79 V |
+| IN1 | `SARADC_IN1_RECOVER` | RECOVER jumper H2 (short to GND = loader mode) | ~1.79 V |
+| IN2 | `SARADC_IN2` | **unconnected** (no connector/test point) | ~0.9 V float |
+| IN3 | `SARADC_IN3` | **unconnected** | ~0.9 V float |
+| IN4..IN7 | not bonded | - | 0 |
+
+JP4 (40-pin expansion) carries **no ADC signals**. So: analog inputs on
+this board = 2 key/jumper channels + 2 floating channels not routed
+anywhere. To use a real external analog signal, add an external I2C/SPI
+ADC (JP4 has I2C0/I2C1 and SPI0).
+
+(The internal audio codec also has differential mic inputs
+`ACODEC_ADC_INP/INN`, also unconnected on this board.)
+
 ## Serial console
 
 DEBUG-TTL 3-pin: TXD / RXD / GND, 115200 8N1.
