@@ -96,6 +96,10 @@ cat /sys/bus/iio/devices/iio:device0/in_voltage0_raw
   (`/sys/kernel/debug/clk/clk_summary`), **no cpufreq** driver - no
   governor, frequency does not change under load. Good benchmark
   repeatability.
+- All three cores share the single `armclk` (each `cpu@f00/f01/f02` node
+  references `<&cru ARMCLK>`); empirically confirmed: identical fixed
+  busy-loop timings per core (30.97 / 32.12 / 32.90 s for 400k shell
+  iterations on cpu0/1/2, ~6 % shell-jitter spread, same clock).
 - The datasheet's "up to 1.5 GHz" is not reachable on this firmware: the
   vendor DTS never enables the PWM behind `vdd_arm` (the CPU regulator),
   so the kernel's DVFS stack fails at boot and the clock stays at the

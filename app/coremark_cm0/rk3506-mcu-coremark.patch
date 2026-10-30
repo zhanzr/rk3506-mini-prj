@@ -1,0 +1,84 @@
+diff --git a/project/rk3506-mcu/GCC/Makefile b/project/rk3506-mcu/GCC/Makefile
+index 81d5820..aaaacc9 100644
+--- a/project/rk3506-mcu/GCC/Makefile
++++ b/project/rk3506-mcu/GCC/Makefile
+@@ -12,6 +12,12 @@ LDFLAGS := --specs=nosys.specs
+ LINKER_SCRIPT := gcc_bus_m0.ld
+ 
+ -include ../../../middleware/benchmark/benchmark.mk
+--include ../../../middleware/rpmsg-lite/rpmsg-lite.mk
+--include ../../../middleware/simple_console/simple_console.mk
++# -include ../../../middleware/rpmsg-lite/rpmsg-lite.mk  # coremark_cm0: dropped (RAM)
++# -include ../../../middleware/simple_console/simple_console.mk  # coremark_cm0: dropped (RAM)
+ include ../../common/GCC/Cortex-M.mk
++
++# coremark_cm0: last-wins -Os to fit 32KB M0 RAM
++CFLAGS += -Os
++LDFLAGS += --specs=nano.specs
++CFLAGS += -flto -ffat-lto-objects
++LDFLAGS += -flto -Os
+diff --git a/project/rk3506-mcu/src/main.c b/project/rk3506-mcu/src/main.c
+index eb80528..3906097 100644
+--- a/project/rk3506-mcu/src/main.c
++++ b/project/rk3506-mcu/src/main.c
+@@ -7,7 +7,7 @@
+ #include "hal_base.h"
+ 
+ /********************* Private MACRO Definition ******************************/
+-//#define TEST_DEMO
++#define TEST_DEMO
+ 
+ /********************* Private Structure Definition **************************/
+ 
+diff --git a/project/rk3506-mcu/src/test_demo.c b/project/rk3506-mcu/src/test_demo.c
+index 06f0688..6a17026 100644
+--- a/project/rk3506-mcu/src/test_demo.c
++++ b/project/rk3506-mcu/src/test_demo.c
+@@ -14,6 +14,7 @@
+ //#define SYSTICK_TEST
+ //#define TIMER_TEST
+ //#define TIMER_INTMUX_TEST
++#define PERF_TEST
+ 
+ /********************* Private Structure Definition **************************/
+ 
+@@ -446,6 +447,17 @@ static void timer_test(void)
+ }
+ #endif
+ 
++#ifdef PERF_TEST
++#include "benchmark.h"
++
++static void perf_test(void)
++{
++    printf("Perftest Start:\n");
++    benchmark_main();
++    printf("Perftest End:\n");
++}
++#endif
++
+ void test_demo(void)
+ {
+ #if defined(GPIO_TEST)
+@@ -471,4 +483,8 @@ void test_demo(void)
+ #ifdef TIMER_INTMUX_TEST
+     timer_test();
+ #endif
++
++#ifdef PERF_TEST
++    perf_test();
++#endif
+ }
+diff --git a/benchmark/coremark/barebones/core_portme.h b/benchmark/coremark/barebones/core_portme.h
+index 12d5c96..f450001 100644
+--- a/benchmark/coremark/barebones/core_portme.h
++++ b/benchmark/coremark/barebones/core_portme.h
+@@ -91,7 +91,7 @@ Original Author: Shay Gal-on
+ typedef signed short   ee_s16;
+ typedef unsigned short ee_u16;
+ typedef signed int     ee_s32;
+-typedef double         ee_f32;
++typedef float ee_f32; /* coremark_cm0: single precision, M0 has no FPU */
+ typedef unsigned char  ee_u8;
+ typedef unsigned int   ee_u32;
+ typedef ee_u32         ee_ptr_int;

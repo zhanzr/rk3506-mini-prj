@@ -8,6 +8,7 @@ self-contained project with its own `Makefile` and `README.md`.
 | `hello/` | Minimal hello world - proves the cross toolchain + deploy loop |
 | `blink_hello/` | Hello world + LED2 (`/sys/class/leds/run`, heartbeat) blinker + SoC temperature sampling |
 | `coremark/` | EEMBC CoreMark 1.0, ARM and Thumb-2 variants (results in its README) |
+| `coremark_cm0/` | CoreMark for the on-chip Cortex-M0 - SDK patch + status: does not fit 32 KB M0 RAM, and the stock image cannot load M0 code yet (see README) |
 
 ## Common workflow (per project, from the project directory)
 
