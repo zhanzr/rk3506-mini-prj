@@ -9,7 +9,7 @@ self-contained project with its own `Makefile` and `README.md`.
 | `blink_hello/` | Hello world + LED2 (`/sys/class/leds/run`, heartbeat) blinker + SoC temperature sampling |
 | `coremark/` | EEMBC CoreMark 1.0, ARM and Thumb-2 variants (results in its README) |
 | `coremark_cm0/` | CoreMark for the on-chip Cortex-M0 - SDK patch + status: does not fit 32 KB M0 RAM, and the stock image cannot load M0 code yet (see README) |
-| `ssd1317_md066_64x48_iic/` | SSD1317 64x48 I2C OLED demo (i2c-dev + GPIO uAPI), ported from the PocketBeagle reference - runs at ~85 fps |
+| `ssd1317_md066_64x48_iic/` | SSD1317 64x48 I2C OLED demo (i2c-dev + GPIO uAPI), ported from the PocketBeagle reference - ~85 fps; `lcm_logo` shows the board's stock boot logo + scaled stock font |
 
 ## Common workflow (per project, from the project directory)
 

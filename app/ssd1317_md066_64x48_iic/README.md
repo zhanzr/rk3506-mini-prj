@@ -37,15 +37,31 @@ Leave a sysfs export holding the line and the demo fails with
 
 ## Behavior
 
+### ssd1317_demo
+
 Demo loop (repeats until Ctrl-C, capped at 30 s per run):
 banner/info -> inverted info -> all-on -> all-off -> 8-px stripes ->
 4-px stripes -> checkerboard -> vertical bars -> border -> gradient ->
 animated bar sweep with console FPS report -> `bye` on exit.
+Measured ~85 fps on the bar-sweep pass.
+
+### lcm_logo (stock font/icon showcase)
+
+Alternates every 3 s until Ctrl-C / 30 s cap:
+
+1. The board's **stock boot logo** - `logo.bmp` (Vanxoak, 654x270 8bpp RLE)
+   extracted from the boot partition's `resource.img`, box-downscaled to
+   64x27 and centered (`logo64.h`, generated at porting time).
+2. The project's **stock F6x8 font scaled 1x/2x/3x** filling the whole
+   panel: "RK3506-mini" (8 px), "RK35" (16 px), "RK" (24 px).
+
+Run with `make run-logo`.
 
 ## Build and run
 
 ```
-make push run       # cross-build in WSL, push, run
+make push run        # cross-build, push, run ssd1317_demo
+make push run-logo   # ... or the stock font/logo showcase
 ```
 
 `CROSS` defaults to the Buildroot SDK in `~/toolchains/...` (see the
