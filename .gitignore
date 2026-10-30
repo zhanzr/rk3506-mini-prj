@@ -6,6 +6,8 @@
 # Project binaries (add one line per project)
 /app/hello/hello
 /app/blink_hello/blink_hello
+/app/ssd1317_md066_64x48_iic/ssd1317_demo
+/app/ssd1317_md066_64x48_iic/ssd1317_demo
 /app/coremark/coremark-arm
 /app/coremark/coremark-thumb
 
