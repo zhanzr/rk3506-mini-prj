@@ -1,13 +1,13 @@
 /*
   main.c - ILI9163C 128x128 (MD144) demo for the rk3506-mini, faithful
-  port of the f411 reference main flow (hardware SPI0 path only).
+  port of the f411 reference main flow (hardware SPI0 path only), plus
+  the lcm_logo screens (stock boot logo 2x + scaled font) from the
+  ssd1317 project.
 
   The module is 3-wire serial: every byte is a 9-bit frame (D/C bit
   clocked first); no D/C pin; backlight hardwired on-module.
 
   Wiring (JP4): SCL=23 SDA=19 RES=29 CS=24; power on 1/6.
-  Reference MADCTL: 0x08. If text appears mirrored on this module batch,
-  note it - MADCTL lives in lcd.c LCD_IC_Init.
 */
 #include <stdio.h>
 #include <stdlib.h>
@@ -15,6 +15,7 @@
 #include <time.h>
 #include <unistd.h>
 
+#include "logo64.h"
 #include "ref/lcd_fonts.h"
 #include "ref/lcd_font_1608.h"
 #include "lcd.h"
@@ -39,6 +40,13 @@ static void fps_frame(void)
     g_frames++;
 }
 
+static void fps_reset(void)
+{
+    g_frames = 0;
+    g_last_frames = 0;
+    g_fps_last_tick = LCD_GetTick();
+}
+
 static void fps_update(void)
 {
     uint32_t now = LCD_GetTick();
@@ -61,12 +69,15 @@ static void fps_update(void)
             LCD_ShowTransparent(1);
             LCD_DisplayString(1, (uint16_t)(ANIM_H + 4), buf);
             LCD_ShowTransparent(0);
+            if (fps)
+                printf("[fps] %u\n", fps);
         }
     }
 }
 
 static void paint_fps_band(void)
 {
+    fps_reset();
     LCD_SetColor(BACK_COLOR);
     LCD_SetBackColor(BACK_COLOR);
     LCD_FillRect(0, (uint16_t)ANIM_H, SCREEN_W, FPS_BAND);
@@ -125,9 +136,11 @@ static void draw_gradient(int hue_a, int hue_b, uint16_t *row)
 static void gradient_demo(uint32_t ms)
 {
     static uint16_t row[SCREEN_W];
+    uint32_t frames = 0;
 
     LCD_SetBackColor(BACK_COLOR);
     paint_fps_band();
+    fps_reset();
 
     uint32_t start = LCD_GetTick();
     uint32_t t = 0;
@@ -141,31 +154,132 @@ static void gradient_demo(uint32_t ms)
             hue_b -= 3600;
         draw_gradient(hue_a, hue_b, row);
         fps_frame();
+        frames++;
         fps_update();
         t = LCD_GetTick() - start;
     } while (t < ms);
+
+    printf("  gradient: %u frames in %u ms = %u fps\n",
+           frames, t, frames * 1000u / (t ? t : 1));
 }
 
-/* ---- vendor TEST_STAND screens ---- */
+/* ---- timed screen helper ---- */
+static void timed_screen(const char *name, void (*fn)(void))
+{
+    uint32_t t0 = LCD_GetTick();
+
+    fn();
+    printf("  %-6s: %u ms\n", name, LCD_GetTick() - t0);
+}
+
+static void disp_red(void)   { DispColor(LCD_RED); }
+static void disp_green(void) { DispColor(LCD_GREEN); }
+static void disp_blue(void)  { DispColor(LCD_BLUE); }
+static void disp_white(void) { DispColor(LCD_WHITE); }
+static void disp_black(void) { DispColor(LCD_BLACK); }
+
 static void TEST_STAND(void)
 {
-    DispFrame();
-    StopDelay(Delay_Time);
-
-    DispGrayHor16();
-    StopDelay(Delay_Time);
-
-    DispBand();
-    StopDelay(Delay_Time);
-
-    DispColor(LCD_RED);   StopDelay(Delay_Time);
-    DispColor(LCD_GREEN); StopDelay(Delay_Time);
-    DispColor(LCD_BLUE);  StopDelay(Delay_Time);
-    DispColor(LCD_WHITE); StopDelay(Delay_Time);
-    DispColor(LCD_BLACK); StopDelay(Delay_Time);
+    fps_reset();
+    timed_screen("frame", DispFrame);
+    timed_screen("gray",  DispGrayHor16);
+    timed_screen("band",  DispBand);
+    timed_screen("red",   disp_red);
+    timed_screen("green", disp_green);
+    timed_screen("blue",  disp_blue);
+    timed_screen("white", disp_white);
+    timed_screen("black", disp_black);
 }
 
-/* ---- info page ---- */
+/* ---- fb helpers (128x128 RGB565) ---- */
+static uint16_t s_fb[128 * 128];
+
+static void fb_blit(void)
+{
+    LCD_SetAddress(0, 0, 127, 127);
+    spi_stream_begin();
+    for (int i = 0; i < 128 * 128; i++)
+        spi_stream_word(s_fb[i]);
+    spi_stream_end();
+}
+
+static void fb_char_scaled(uint8_t c, int x0, int y0, int scale,
+                           uint16_t fg, uint16_t bg)
+{
+    if (c < 0x20 || c > 0x7E)
+        return;
+    {
+        int index = c - 0x20;
+
+        for (int row = 0; row < 16; row++)
+        {
+            uint8_t bits = asc2_1608[index * 16 + row];
+
+            for (int col = 0; col < 8; col++)
+            {
+                /* font glyphs are LSB-first: bit 0 = leftmost pixel */
+                uint16_t v = (bits >> col) & 1u ? fg : bg;
+
+                for (int sy = 0; sy < scale; sy++)
+                    for (int sx = 0; sx < scale; sx++)
+                    {
+                        int px = x0 + col * scale + sx;
+                        int py = y0 + row * scale + sy;
+
+                        if (px >= 0 && px < 128 && py >= 0 && py < 128)
+                            s_fb[py * 128 + px] = v;
+                    }
+            }
+        }
+    }
+}
+
+static void fb_string_scaled(const char *s, int x0, int y0, int scale,
+                             uint16_t fg, uint16_t bg)
+{
+    int x = x0;
+
+    while (*s)
+    {
+        fb_char_scaled((uint8_t)*s, x, y0, scale, fg, bg);
+        x += 8 * scale;
+        s++;
+    }
+}
+
+/* stock boot logo (resource.img logo.bmp -> logo64.h), 2x scaled,
+ * caption underneath - the lcm_logo screen of the ssd1317 project.
+ * logo64 layout: page-major, 64 cols x 48 rows, bit = row in page. */
+static void logo_screen(void)
+{
+    fps_reset();
+    memset(s_fb, 0, sizeof(s_fb));
+    for (int y = 0; y < 48; y++)
+        for (int x = 0; x < 64; x++)
+        {
+            uint8_t byte = logo64_fb[(y / 8) * 64 + x];
+            uint16_t c = (byte >> (y % 8)) & 1 ? WHITE : BLACK;
+
+            for (int dy = 0; dy < 2; dy++)
+                for (int dx = 0; dx < 2; dx++)
+                    s_fb[(16 + y * 2 + dy) * 128 + x * 2 + dx] = c;
+        }
+    fb_string_scaled("RK3506-mini", 22, 112, 1, YELLOW, BLACK);
+    fb_blit();
+}
+
+/* scaled font screen: 1x / 2x / 3x of the 8x16 font */
+static void scaled_font_screen(void)
+{
+    fps_reset();
+    memset(s_fb, 0, sizeof(s_fb));
+    fb_string_scaled("RK3506-mini", 22, 0, 1, WHITE, BLACK);
+    fb_string_scaled("RK35", 32, 16, 2, CYAN, BLACK);
+    fb_string_scaled("RK", 40, 64, 3, GREEN, BLACK);
+    fb_blit();
+}
+
+/* ---- info page (f411 reference) ---- */
 static void info_demo(uint32_t ms, uint8_t invert)
 {
     char buf[24];
@@ -174,6 +288,7 @@ static void info_demo(uint32_t ms, uint8_t invert)
     uint32_t fg = invert ? LCD_BLACK : LCD_WHITE;
     uint32_t bg = invert ? LCD_WHITE : LCD_BLACK;
 
+    fps_reset();
 #if defined(__clang__)
     snprintf(comp, sizeof comp, "Clang %d.%d", __clang_major__,
              __clang_minor__);
@@ -203,22 +318,28 @@ static void info_demo(uint32_t ms, uint8_t invert)
     int y = 2;
 
     snprintf(buf, sizeof buf, "%s", comp);
-    LCD_DisplayString((uint16_t)ix, (uint16_t)y, buf); y = (uint16_t)(y + INFO_DY);
+    LCD_DisplayString((uint16_t)ix, (uint16_t)y, buf);
+    y = (uint16_t)(y + INFO_DY);
 
     snprintf(buf, sizeof buf, "Build %s", __DATE__);
-    LCD_DisplayString((uint16_t)ix, (uint16_t)y, buf); y = (uint16_t)(y + INFO_DY);
+    LCD_DisplayString((uint16_t)ix, (uint16_t)y, buf);
+    y = (uint16_t)(y + INFO_DY);
 
     snprintf(buf, sizeof buf, "Freq %lu MHz", mhz);
-    LCD_DisplayString((uint16_t)ix, (uint16_t)y, buf); y = (uint16_t)(y + INFO_DY);
+    LCD_DisplayString((uint16_t)ix, (uint16_t)y, buf);
+    y = (uint16_t)(y + INFO_DY);
 
     snprintf(buf, sizeof buf, "SPI0 40 MHz (HW)");
-    LCD_DisplayString((uint16_t)ix, (uint16_t)y, buf); y = (uint16_t)(y + INFO_DY);
+    LCD_DisplayString((uint16_t)ix, (uint16_t)y, buf);
+    y = (uint16_t)(y + INFO_DY);
 
     snprintf(buf, sizeof buf, "SCL=23 SDA=19");
-    LCD_DisplayString((uint16_t)ix, (uint16_t)y, buf); y = (uint16_t)(y + INFO_DY);
+    LCD_DisplayString((uint16_t)ix, (uint16_t)y, buf);
+    y = (uint16_t)(y + INFO_DY);
 
     snprintf(buf, sizeof buf, "RST=29 CS=24");
-    LCD_DisplayString((uint16_t)ix, (uint16_t)y, buf); y = (uint16_t)(y + INFO_DY);
+    LCD_DisplayString((uint16_t)ix, (uint16_t)y, buf);
+    y = (uint16_t)(y + INFO_DY);
 
     snprintf(buf, sizeof buf, "UID 79a8bf52");
     LCD_DisplayString((uint16_t)ix, (uint16_t)y, buf);
@@ -268,11 +389,19 @@ static void run_patterns(void)
     printf("[LCD] phase: info (inverted colors)\n");
     info_demo(5000, 1);
 
-    printf("[LCD] phase: vendor TEST_STAND\n");
+    printf("[LCD] phase: vendor TEST_STAND (per-screen write time)\n");
     TEST_STAND();
 
     printf("[LCD] phase: gradient\n");
     gradient_demo(1000);
+
+    printf("[LCD] phase: stock boot logo (2x) + caption\n");
+    logo_screen();
+    sleep(3);
+
+    printf("[LCD] phase: scaled font (1x/2x/3x)\n");
+    scaled_font_screen();
+    sleep(3);
 }
 
 int main(int argc, char **argv)
@@ -287,8 +416,9 @@ int main(int argc, char **argv)
             switch (argv[i][1])
             {
             case 's': speed_khz = (unsigned)atoi(argv[++i]); break;
-            default:  printf("usage: ili9163c_demo [-s speed_kHz]\n");
-                      return 1;
+            default:
+                printf("usage: ili9163c_demo [-s speed_kHz]\n");
+                return 1;
             }
         }
         else
