@@ -76,21 +76,24 @@ void LCD_SetAddress(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2)
     WriteComm(0x2C);
 }
 
-/* bulk fill: build one 480-byte row, repeat over spidev (CS rises per
-   4096-byte chunk are harmless - the GRAM window auto-increments) */
+/* bulk fill: build one hi/lo-ordered 480-byte row, repeat over spidev
+   (CS rises per 4096-byte chunk are harmless - GRAM auto-increments) */
 static void fill_bulk16(uint16_t rgb565, uint32_t pixels)
 {
-    static uint16_t row[COL];
-    uint32_t per_row = pixels < COL ? pixels : COL;
+    static uint8_t row[COL * 2];
+    uint8_t hi = (uint8_t)(rgb565 >> 8), lo = (uint8_t)rgb565;
 
-    for (uint32_t i = 0; i < per_row; i++)
-        row[i] = rgb565;
+    for (uint32_t i = 0; i < COL; i++)
+    {
+        row[2 * i]     = hi;
+        row[2 * i + 1] = lo;
+    }
 
     while (pixels)
     {
         uint32_t n = pixels < COL ? pixels : COL;
 
-        spi_write_buf((const uint8_t *)row, n * 2);
+        spi_write_buf(row, n * 2);
         pixels -= n;
     }
 }
@@ -273,7 +276,7 @@ void DispFrame(void)
             else
                 row[j] = 0xFFFF;
         }
-        spi_write_buf((const uint8_t *)row, COL * 2);
+        spi_write_pixels16(row, COL);
     }
 }
 
@@ -285,7 +288,7 @@ void DispGrayHor16(void)
     for (int j = 0; j < COL; j++)
         row[j] = (uint16_t)((j * 16 / COL) * 2048);
     for (int i = 0; i < ROW; i++)
-        spi_write_buf((const uint8_t *)row, COL * 2);
+        spi_write_pixels16(row, COL);
 }
 
 void DispBand(void)
@@ -299,7 +302,7 @@ void DispBand(void)
     for (int j = 0; j < COL; j++)
         row[j] = cols[j * 8 / COL];
     for (int i = 0; i < ROW; i++)
-        spi_write_buf((const uint8_t *)row, COL * 2);
+        spi_write_pixels16(row, COL);
 }
 
 void BlockWrite(uint16_t Xstart, uint16_t Xend, uint16_t Ystart,
@@ -407,8 +410,7 @@ void LCD_CopyBuffer(uint16_t x, uint16_t y, uint16_t w, uint16_t h,
 {
     LCD_SetAddress(x, y, (uint16_t)(x + w - 1), (uint16_t)(y + h - 1));
     for (uint16_t k = 0; k < h; k++)
-        spi_write_buf((const uint8_t *)(data + (uint32_t)k * w),
-                      (size_t)w * 2);
+        spi_write_pixels16(data + (uint32_t)k * w, w);
 }
 
 /* ---- text ---- */

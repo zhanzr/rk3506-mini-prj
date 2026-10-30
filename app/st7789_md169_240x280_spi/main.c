@@ -30,8 +30,9 @@
 #define DWELL_MS   4000    /* per-pattern hold so colors can be judged */
 
 /* ---- backlight PWM (JP4.15, pwm1_8ch_0 @ ff170000) ----
- * 25 kHz: at 500 Hz the LED shows visible ripple on bright frames */
-#define BL_PERIOD_NS 40000
+ * clk_pwm1 = 93.75 MHz; 5000 ns = 200 kHz - smooths the LED driver,
+ * lower rates show visible ripple on bright frames */
+#define BL_PERIOD_NS 5000
 
 static int g_bl_pct;   /* current duty, shown on the info page */
 
@@ -41,6 +42,18 @@ static void backlight_init(void)
     FILE *fp;
 
     snprintf(path, sizeof(path), "/sys/class/pwm/pwmchip0/export");
+    fp = fopen(path, "w");
+    if (fp) { fprintf(fp, "0"); fclose(fp); }
+
+    snprintf(path, sizeof(path), "/sys/class/pwm/pwmchip0/pwm0/enable");
+    fp = fopen(path, "w");
+    if (fp) { fprintf(fp, "0"); fclose(fp); }
+
+    snprintf(path, sizeof(path), "/sys/class/pwm/pwmchip0/pwm0/polarity");
+    fp = fopen(path, "w");
+    if (fp) { fprintf(fp, "normal"); fclose(fp); }
+
+    snprintf(path, sizeof(path), "/sys/class/pwm/pwmchip0/pwm0/duty_cycle");
     fp = fopen(path, "w");
     if (fp) { fprintf(fp, "0"); fclose(fp); }
 
@@ -165,8 +178,7 @@ static void draw_gradient(int hue_a, int hue_b, uint16_t *row)
             for (int x = 0; x < SCREEN_W; x++)
                 row[(uint32_t)k * SCREEN_W + x] = px;
         }
-        spi_write_buf((const uint8_t *)row,
-                      (size_t)rows * SCREEN_W * 2);
+        spi_write_pixels16(row, (size_t)rows * SCREEN_W);
     }
 }
 
@@ -213,7 +225,7 @@ static uint16_t rgb565(uint32_t rgb888)
 static void fb_blit(void)
 {
     LCD_SetAddress(0, 0, SCREEN_W - 1, SCREEN_H - 1);
-    spi_write_buf((const uint8_t *)s_fb, sizeof(s_fb));
+    spi_write_pixels16(s_fb, SCREEN_W * SCREEN_H);
 }
 
 static void fb_char_scaled(uint8_t c, int x0, int y0, int scale,
@@ -473,7 +485,7 @@ int main(int argc, char **argv)
 
     printf("ST7789V 1.69\" 240x280, 4-wire SPI (hw SPI0 + DC gpio):\n");
     printf("SCLK=JP4.23 MOSI=JP4.19 CS=JP4.24 DC=JP4.33 RST=JP4.29 "
-           "BLK=JP4.15 (PWM 25 kHz)\n");
+           "BLK=JP4.15 (PWM 200 kHz)\n");
 
     backlight_init();
 

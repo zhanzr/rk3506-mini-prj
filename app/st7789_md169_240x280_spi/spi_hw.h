@@ -24,5 +24,7 @@ void spi_dc_open(int gpio);         /* DC gpio (default 47) */
 void spi_dc_set(int on);            /* DC: 0 = command, 1 = data */
 void spi_write_byte(uint8_t b);     /* one byte with current DC */
 void spi_write_buf(const uint8_t *b, size_t n); /* DC high, chunked 4096 */
+void spi_write_pixels16(const uint16_t *px, size_t count);
+                                    /* DC high, swaps words to big-endian */
 
 #endif /* SPI_HW_H */

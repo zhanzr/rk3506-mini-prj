@@ -128,6 +128,31 @@ void spi_write_byte(uint8_t b)
         perror("spi write");
 }
 
+/* the ST7789 wants each RGB565 word high-byte first, but the uint16
+   buffers hold host (little-endian) order - swap into a staging buffer */
+void spi_write_pixels16(const uint16_t *px, size_t count)
+{
+    static uint8_t stage[2048]; /* 1024 pixels < 4096 bufsiz */
+
+    while (count)
+    {
+        size_t n = count > 1024 ? 1024 : count;
+
+        for (size_t i = 0; i < n; i++)
+        {
+            stage[2 * i]     = (uint8_t)(px[i] >> 8);
+            stage[2 * i + 1] = (uint8_t)(px[i] & 0xFF);
+        }
+        if (write(s_fd, stage, n * 2) < 0)
+        {
+            perror("spi write");
+            return;
+        }
+        px += n;
+        count -= n;
+    }
+}
+
 void spi_write_buf(const uint8_t *b, size_t n)
 {
     /* spidev limits a single transfer to its bufsiz (default 4096) */
