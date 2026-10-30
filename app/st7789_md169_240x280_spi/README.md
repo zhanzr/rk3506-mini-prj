@@ -2,7 +2,7 @@
 
 ST7789V 1.69" 240x280 (MD169) SPI TFT for the rk3506-mini, ported from
 `f4-demo/nano-f411/app/st7789_md169_240x280` (STM32F411, itself from the
-c542 board_t1 st7789 bsp). This is the **software (bit-bang) version** -
+c542 board_t1 st7789 bsp). This is the **hardware SPI0 version** (4-wire: DC gpio + spidev CS0) -
 runs on the stock image with zero DTB changes.
 
 Driver facts carried over from the reference:

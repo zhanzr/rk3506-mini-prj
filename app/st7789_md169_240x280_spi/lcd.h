@@ -1,24 +1,33 @@
 /*
-  lcd.h - ST7789V 1.69" 240x280 (MD169) driver, Linux port of the f411
-  reference (nano-f411 app/st7789_md169_240x280), bit-bang via gpio_bb.
-
-  Panel geometry (from the c542 board_t1 bsp, verified there):
-  240x280 glass inside the ST7789's 240x320 GRAM -> ROW_Pre = 20
-  (glass covers GRAM rows 20..299), MADCTL 0x00, IPS inversion (INVON).
+  lcd.h - ST7789V 1.69" 240x280 (MD169) driver, hardware SPI0 port of
+  the f411 reference (vendor tftlcd.c init for this module).
 */
 #ifndef LCD_H
 #define LCD_H
 
 #include <stdint.h>
+#include "ref/lcd_fonts.h"
 
+/* ---- panel geometry ---- */
 #define LCD_Width    240
 #define LCD_Height   280
 #define COL       240
 #define ROW       280
 #define COL_Pre   0
 #define ROW_Pre   20
+#define Delay_Time 500
 
-/* raw RGB565 */
+/* ---- 24-bit colors (RGB888, converted by LCD_SetColor) ---- */
+#define LCD_WHITE       0xFFFFFF
+#define LCD_BLACK       0x000000
+#define LCD_BLUE        0x0000FF
+#define LCD_GREEN       0x00FF00
+#define LCD_RED         0xFF0000
+#define LCD_CYAN        0x00FFFF
+#define LCD_MAGENTA     0xFF00FF
+#define LCD_YELLOW      0xFFFF00
+
+/* ---- raw RGB565 ---- */
 #define WHITE   0xFFFF
 #define BLACK   0x0000
 #define BLUE    0x001F
@@ -28,24 +37,36 @@
 #define CYAN    0x7FFF
 #define YELLOW  0xFFE0
 
-void lcd_init(void);
-void lcd_init_slow(int slow_us_per_bit);
-void lcd_set_inversion(int on);
-void lcd_reset(void);
-void lcd_set_address(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2);
-void write_comm(uint16_t data);
-void write_data(uint16_t data);
-void write_data_fast(uint8_t b);    /* raw byte, caller manages CS/DC */
-void lcd_begin_data(void);          /* DC high, CS low */
-void lcd_end_data(void);            /* CS high */
+uint32_t LCD_GetTick(void);
+void StopDelay(uint16_t ms);
 
-void disp_color(uint16_t color);
-void disp_frame(void);
-void disp_gray_hor16(void);
-void disp_band(void);
-void lcd_draw_string(uint16_t x, uint16_t y, const char *s,
-                     uint16_t color, uint16_t bgcolor);
-void lcd_fill_rect(uint16_t x, uint16_t y, uint16_t w, uint16_t h,
-                   uint16_t color);
+void LCD_Init(void);
+void LCD_RESET(void);
+void LCD_IC_Init(void);
+void LCD_SetAddress(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2);
+void LCD_SetColor(uint32_t rgb888);
+void LCD_SetBackColor(uint32_t rgb888);
+void LCD_Clear(void);
+void LCD_ClearRect(uint16_t x, uint16_t y, uint16_t width, uint16_t height);
+void DispColor(uint32_t color);
+void DispFrame(void);
+void DispGrayHor16(void);
+void DispBand(void);
+
+void LCD_SetAsciiFont(pFONT *font);
+void LCD_ShowTransparent(uint8_t mode);
+void LCD_DisplayChar(uint16_t x, uint16_t y, uint8_t c);
+void LCD_DisplayString(uint16_t x, uint16_t y, char *p);
+
+void LCD_DrawPoint(uint16_t x, uint16_t y, uint32_t color);
+void LCD_DrawLine_V(uint16_t x, uint16_t y, uint16_t height);
+void LCD_DrawLine_H(uint16_t x, uint16_t y, uint16_t width);
+void LCD_DrawLine(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2);
+void LCD_DrawRect(uint16_t x, uint16_t y, uint16_t width, uint16_t height);
+void LCD_DrawCircle(uint16_t x, uint16_t y, uint16_t r);
+void LCD_FillRect(uint16_t x, uint16_t y, uint16_t width, uint16_t height);
+void LCD_FillCircle(uint16_t x, uint16_t y, uint16_t r);
+void LCD_CopyBuffer(uint16_t x, uint16_t y, uint16_t width, uint16_t height,
+                    uint16_t *data);
 
 #endif /* LCD_H */
