@@ -187,21 +187,19 @@ void LCD_Clear(void)
     uint32_t n = (uint32_t)COL * ROW;
 
     LCD_SetAddress(0, 0, COL - 1, ROW - 1);
+    spi_stream_begin();
     while (n--)
-    {
-        LCD_WriteDataFast((uint8_t)(s_BackColor >> 8));
-        LCD_WriteDataFast((uint8_t)s_BackColor);
-    }
+        spi_stream_word(s_BackColor);
+    spi_stream_end();
 }
 
 void LCD_ClearRect(uint16_t x, uint16_t y, uint16_t w, uint16_t h)
 {
     LCD_SetAddress(x, y, (uint16_t)(x + w - 1), (uint16_t)(y + h - 1));
+    spi_stream_begin();
     for (uint32_t n = (uint32_t)w * h; n--;)
-    {
-        LCD_WriteDataFast((uint8_t)(s_BackColor >> 8));
-        LCD_WriteDataFast((uint8_t)s_BackColor);
-    }
+        spi_stream_word(s_BackColor);
+    spi_stream_end();
 }
 
 /* ---- vendor TEST_STAND screens ---- */
@@ -211,11 +209,10 @@ void DispColor(uint32_t rgb888)
     uint32_t n = (uint32_t)COL * ROW;
 
     LCD_SetAddress(0, 0, COL - 1, ROW - 1);
+    spi_stream_begin();
     while (n--)
-    {
-        LCD_WriteDataFast((uint8_t)(c >> 8));
-        LCD_WriteDataFast((uint8_t)c);
-    }
+        spi_stream_word(c);
+    spi_stream_end();
 }
 
 void DispFrame(void)
@@ -223,6 +220,7 @@ void DispFrame(void)
     int i, j;
 
     LCD_SetAddress(0, 0, COL - 1, ROW - 1);
+    spi_stream_begin();
     for (i = 0; i < ROW; i++)
         for (j = 0; j < COL; j++)
         {
@@ -234,9 +232,9 @@ void DispFrame(void)
                 c = 0x001F;
             else
                 c = 0xFFFF;
-            LCD_WriteDataFast((uint8_t)(c >> 8));
-            LCD_WriteDataFast((uint8_t)c);
+            spi_stream_word(c);
         }
+    spi_stream_end();
 }
 
 void DispGrayHor16(void)
@@ -244,13 +242,14 @@ void DispGrayHor16(void)
     int i, j;
 
     LCD_SetAddress(0, 0, COL - 1, ROW - 1);
+    spi_stream_begin();
     for (i = 0; i < ROW; i++)
         for (j = 0; j < COL; j++)
         {
             uint16_t v = (uint16_t)((j * 16 / COL) * 2048);
-            LCD_WriteDataFast((uint8_t)(v >> 8));
-            LCD_WriteDataFast((uint8_t)v);
+            spi_stream_word(v);
         }
+    spi_stream_end();
 }
 
 void DispBand(void)
@@ -261,13 +260,11 @@ void DispBand(void)
     int i, j;
 
     LCD_SetAddress(0, 0, COL - 1, ROW - 1);
+    spi_stream_begin();
     for (i = 0; i < ROW; i++)
         for (j = 0; j < COL; j++)
-        {
-            uint16_t c = cols[j * 8 / COL];
-            LCD_WriteDataFast((uint8_t)(c >> 8));
-            LCD_WriteDataFast((uint8_t)c);
-        }
+            spi_stream_word(cols[j * 8 / COL]);
+    spi_stream_end();
 }
 
 void BlockWrite(uint16_t Xstart, uint16_t Xend, uint16_t Ystart,
@@ -309,11 +306,10 @@ void LCD_DrawLine_H(uint16_t x, uint16_t y, uint16_t w)
 void LCD_FillRect(uint16_t x, uint16_t y, uint16_t w, uint16_t h)
 {
     LCD_SetAddress(x, y, (uint16_t)(x + w - 1), (uint16_t)(y + h - 1));
+    spi_stream_begin();
     for (uint32_t n = (uint32_t)w * h; n--;)
-    {
-        LCD_WriteDataFast((uint8_t)(s_Color >> 8));
-        LCD_WriteDataFast((uint8_t)s_Color);
-    }
+        spi_stream_word(s_Color);
+    spi_stream_end();
 }
 
 void LCD_DrawLine(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2)
@@ -374,10 +370,7 @@ void LCD_FillCircle(uint16_t x0, uint16_t y0, uint16_t r)
         LCD_SetAddress((uint16_t)(x0 - span), (uint16_t)(y0 + dy),
                        (uint16_t)(x0 + span), (uint16_t)(y0 + dy));
         for (int k = 0; k < 2 * span + 1; k++)
-        {
-            LCD_WriteDataFast((uint8_t)(s_Color >> 8));
-            LCD_WriteDataFast((uint8_t)s_Color);
-        }
+            spi_stream_word(s_Color);
     }
 }
 
@@ -389,8 +382,7 @@ void LCD_CopyBuffer(uint16_t x, uint16_t y, uint16_t w, uint16_t h,
     LCD_SetAddress(x, y, (uint16_t)(x + w - 1), (uint16_t)(y + h - 1));
     while (n--)
     {
-        LCD_WriteDataFast((uint8_t)(*data >> 8));
-        LCD_WriteDataFast((uint8_t)*data);
+        spi_stream_word(*data);
         data++;
     }
 }
