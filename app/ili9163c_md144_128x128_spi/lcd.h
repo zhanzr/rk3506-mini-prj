@@ -3,8 +3,7 @@
   reference. 3-wire serial: no D/C pin - each byte is a 9-bit frame
   (D/C bit clocked first); backlight is hardwired on-module.
 
-  Geometry: 128x128, COL_Pre = 0, ROW_Pre = 0 (init addresses the full
-  column range 0..127 and page range 0..159).
+  Geometry: 128x128, COL_Pre = 0, ROW_Pre = 0.
 */
 #ifndef LCD_H
 #define LCD_H
@@ -28,19 +27,28 @@
 
 void lcd_init(void);
 void lcd_reset(void);
+void lcd_set_madctl(uint8_t v);       /* default 0x08; mirror: 0x48 */
+void lcd_set_inversion(int on);
 void lcd_set_address(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2);
 void write_comm(uint8_t data);
 void write_data8(uint8_t data);
 void write_data16(uint16_t data);
-void lcd_begin_data(void);          /* CS low */
-void lcd_end_data(void);            /* CS high */
+void lcd_begin_data(void);            /* CS low */
+void lcd_end_data(void);              /* CS high */
 
 void disp_color(uint16_t color);
 void disp_band(void);
 void disp_gray_hor16(void);
+void disp_frame(void);
+void disp_checker(void);
+void disp_vstripes(void);
 void lcd_fill_rect(uint16_t x, uint16_t y, uint16_t w, uint16_t h,
                    uint16_t color);
+void lcd_draw_line(int x0, int y0, int x1, int y1, uint16_t color);
+void lcd_draw_circle(int x0, int y0, int r, uint16_t color);
+void lcd_fill_circle(int x0, int y0, int r, uint16_t color);
 void lcd_draw_string(uint16_t x, uint16_t y, const char *s,
                      uint16_t color, uint16_t bgcolor);
+void lcd_show_logo(void);             /* stock boot logo, 2x scaled */
 
 #endif /* LCD_H */

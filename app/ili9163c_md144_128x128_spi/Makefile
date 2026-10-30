@@ -2,6 +2,7 @@ TARGET    := ili9163c_demo
 TC        ?= $(HOME)/toolchains/arm-buildroot-linux-gnueabihf_sdk-buildroot
 CROSS     ?= $(TC)/bin/arm-linux-
 CROSS_FLAGS := -O2 -Wall -Wextra -march=armv7-a -mfpu=neon-vfpv4 -mfloat-abi=hard
+LDLIBS     := -lm
 BOARD     ?= rk3506-buildroot
 BOARD_DIR ?= ili9163c_md144_128x128_spi
 SOURCES   := main.c lcd.c spi_hw.c font_1608.c spi_hw.h lcd.h font_1608.h Makefile README.md
@@ -9,7 +10,7 @@ SOURCES   := main.c lcd.c spi_hw.c font_1608.c spi_hw.h lcd.h font_1608.h Makefi
 all: $(TARGET)
 
 $(TARGET): main.c lcd.c spi_hw.c font_1608.c spi_hw.h lcd.h font_1608.h
-	$(CROSS)gcc $(CROSS_FLAGS) -o $@ main.c lcd.c spi_hw.c font_1608.c
+	$(CROSS)gcc $(CROSS_FLAGS) -o $@ main.c lcd.c spi_hw.c font_1608.c -lm
 
 push: $(TARGET)
 	ssh $(BOARD) "mkdir -p $(BOARD_DIR)"
