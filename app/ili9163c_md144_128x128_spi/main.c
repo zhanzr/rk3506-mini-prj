@@ -83,24 +83,29 @@ static void screens(void)
  * pick the one where text reads correctly */
 static void mirror_pick(void)
 {
-    static const unsigned vals[4] = { 0x08, 0x48, 0x0C, 0x4C };
+    static const unsigned vals[4] = { 0x08, 0x48, 0x88, 0xC8 };
 
     for (int i = 0; i < 4; i++)
     {
-        printf("MADCTL 0x%02X - if the text reads correctly, note this "
-               "value\n", vals[i]);
-        lcd_set_madctl((uint8_t)vals[i]);
-        /* MADCTL can be changed on the fly: re-send it + redraw text */
+        printf("MADCTL 0x%02X - correct if text reads normally AND the "
+               "red bar is on the LEFT\n", vals[i]);
+        write_comm(0x36);                 /* apply MADCTL live */
+        write_data8((uint8_t)vals[i]);
         disp_color(BLACK);
-        lcd_draw_string(8, 56, "MADCTL TEST", WHITE, BLACK);
+        lcd_fill_rect(0, 0, 6, 128, RED); /* direction marker */
+        lcd_draw_string(16, 24, "MIRROR TEST", WHITE, BLACK);
         {
             char buf[16];
 
-            snprintf(buf, sizeof(buf), "0x%02X", vals[i]);
-            lcd_draw_string(32, 76, buf, YELLOW, BLACK);
+            snprintf(buf, sizeof(buf), "MADCTL 0x%02X", vals[i]);
+            lcd_draw_string(16, 48, buf, YELLOW, BLACK);
         }
+        lcd_draw_string(16, 72, "bar left = OK", CYAN, BLACK);
         sleep(3);
     }
+    /* leave the first value active; pass -M <picked> to the demo */
+    write_comm(0x36);
+    write_data8((uint8_t)vals[0]);
 }
 
 static void speed_sweep(unsigned base_khz __attribute__((unused)))
