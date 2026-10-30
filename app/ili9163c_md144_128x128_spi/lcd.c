@@ -163,11 +163,10 @@ void disp_color(uint16_t color)
     uint32_t n = (uint32_t)COL * ROW;
 
     lcd_set_address(0, 0, COL - 1, ROW - 1);
+    spi_stream_begin();
     while (n--)
-    {
-        write_data8((uint8_t)(color >> 8));
-        write_data8((uint8_t)color);
-    }
+        spi_stream_word(color);
+    spi_stream_end();
 }
 
 void disp_band(void)
@@ -178,9 +177,11 @@ void disp_band(void)
     int i, j;
 
     lcd_set_address(0, 0, COL - 1, ROW - 1);
+    spi_stream_begin();
     for (i = 0; i < ROW; i++)
         for (j = 0; j < COL; j++)
-            write_data16(cols[j * 8 / COL]);
+            spi_stream_word(cols[j * 8 / COL]);
+    spi_stream_end();
 }
 
 void disp_gray_hor16(void)
@@ -188,13 +189,15 @@ void disp_gray_hor16(void)
     int i, j;
 
     lcd_set_address(0, 0, COL - 1, ROW - 1);
+    spi_stream_begin();
     for (i = 0; i < ROW; i++)
         for (j = 0; j < COL; j++)
         {
             uint16_t c = (uint16_t)(j * 16 / COL) * 2048; /* r5<<11 */
             uint16_t g = (uint16_t)(j * 32 / COL) << 5;
-            write_data16(c | g);
+            spi_stream_word(c | g);
         }
+    spi_stream_end();
 }
 
 void disp_frame(void)
@@ -207,12 +210,11 @@ void disp_frame(void)
         {
             uint16_t c;
 
-            if (i == 0 || i == ROW - 1 || j == 0 || j == COL - 1 ||
-                i == 1 || i == ROW - 2 || j == 1 || j == COL - 2)
+            if (i < 2 || i > ROW - 3 || j < 2 || j > COL - 3)
                 c = WHITE;
             else
                 c = BLACK;
-            write_data16(c);
+            spi_stream_word(c);
         }
 }
 
@@ -223,7 +225,7 @@ void disp_checker(void)
     lcd_set_address(0, 0, COL - 1, ROW - 1);
     for (i = 0; i < ROW; i++)
         for (j = 0; j < COL; j++)
-            write_data16(((i / 8) ^ (j / 8)) & 1 ? WHITE : BLACK);
+            spi_stream_word(((i / 8) ^ (j / 8)) & 1 ? WHITE : BLACK);
 }
 
 void disp_vstripes(void)
@@ -233,15 +235,17 @@ void disp_vstripes(void)
     lcd_set_address(0, 0, COL - 1, ROW - 1);
     for (i = 0; i < ROW; i++)
         for (j = 0; j < COL; j++)
-            write_data16(j & 1 ? WHITE : BLACK);
+            spi_stream_word(j & 1 ? WHITE : BLACK);
 }
 
 void lcd_fill_rect(uint16_t x, uint16_t y, uint16_t w, uint16_t h,
                    uint16_t color)
 {
     lcd_set_address(x, y, (uint16_t)(x + w - 1), (uint16_t)(y + h - 1));
+    spi_stream_begin();
     for (uint32_t n = (uint32_t)w * h; n--;)
-        write_data16(color);
+        spi_stream_word(color);
+    spi_stream_end();
 }
 
 void lcd_draw_line(int x0, int y0, int x1, int y1, uint16_t color)
@@ -404,7 +408,9 @@ void lcd_show_logo(void)
     }
 
     lcd_set_address(0, 0, 127, 127);
+    spi_stream_begin();
     for (y = 0; y < 128; y++)
         for (x = 0; x < 128; x++)
-            write_data16(fb[y * 128 + x]);
+            spi_stream_word(fb[y * 128 + x]);
+    spi_stream_end();
 }

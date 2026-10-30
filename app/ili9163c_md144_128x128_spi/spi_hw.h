@@ -9,6 +9,7 @@
 #include <stdint.h>
 
 int  spi_open(unsigned speed_hz);   /* opens /dev/spidev0.0, SPI mode 0 */
+int  spi_set_speed(unsigned speed_hz); /* change speed on the open fd */
 void spi_res_open(int gpio);        /* RES stays a GPIO (default 49) */
 void spi_res_set(int on);
 void spi_close(void);
