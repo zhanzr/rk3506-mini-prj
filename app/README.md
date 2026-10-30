@@ -10,6 +10,7 @@ self-contained project with its own `Makefile` and `README.md`.
 | `coremark/` | EEMBC CoreMark 1.0, ARM and Thumb-2 variants (results in its README) |
 | `coremark_cm0/` | CoreMark for the on-chip Cortex-M0 - SDK patch + status: does not fit 32 KB M0 RAM, and the stock image cannot load M0 code yet (see README) |
 | `ssd1317_md066_64x48_iic/` | SSD1317 64x48 I2C OLED demo (i2c-dev + GPIO uAPI), ported from the PocketBeagle reference - ~85 fps; `lcm_logo` shows the board's stock boot logo + scaled stock font |
+| `st7789_md169_240x280_spi/` | ST7789 1.69" 240x280 SPI TFT (MD169), ported from the f411 reference - software (bit-bang) version, ~3.5 s/full frame; hw-SPI + PWM backlight after the DTB rebuild |
 
 ## Common workflow (per project, from the project directory)
 
