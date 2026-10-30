@@ -83,10 +83,90 @@ echo 220000  > .../pwm0/duty_cycle
 echo 1       > .../pwm0/enable
 ```
 
-## Interim (no DTB rebuild) options
+## If SAI/CAN0/CAN1/UART1/UART3 are not needed (DTB rebuild happens anyway)
 
-- RESET (49) and DC (47): plain sysfs/GPIO-uAPI pins - work today.
-- SPI: bit-bang via sysfs/GPIO uAPI on gpio 1 (SCLK) / 3 (MOSI) - slow
-  but sufficient for small TFT updates; CS on 48.
-- BLK: tie to JP4.1 (V33, full brightness) or software-PWM a spare GPIO
-  (DC-quality timing is not needed for a backlight LED).
+Disabling them in the DT frees every claimed RM_IO pin, so the wiring can
+follow the module silkscreen 1:1 with **hardware CS**:
+
+| LCM signal | JP4 pin | Resource |
+|---|---|---|
+| SCLK | 23 | spi0 via `rm_io1_spi0_clk` |
+| MOSI | 19 | `rm_io3_spi0_mosi` |
+| (MISO) | 21 | `rm_io6_spi0_miso` |
+| CS | 24 | **hardware CSN0** via `rm_io7_spi0_csn0` |
+| DC | 33 | GPIO1_B7 = gpio 47 (or 31 = gpio 48) |
+| RESET | 29 | gpio 49 |
+| BLK | **15** | GPIO0_B5 / rm_io13 -> `rm_io13_pwm1_ch0`, 11 % duty |
+
+DT additions in this variant (replaces the snippet above):
+
+```dts
+&spi0 {
+    status = "okay";
+    pinctrl-names = "default";
+    pinctrl-0 = <&rm_io1_spi0_clk &rm_io3_spi0_mosi
+                 &rm_io6_spi0_miso &rm_io7_spi0_csn0>;
+    spidev@0 {
+        compatible = "rockchip,spidev";
+        reg = <0>;
+        spi-max-frequency = <50000000>;
+    };
+};
+
+&pwm1_8ch_0 {
+    status = "okay";
+    pinctrl-names = "default";
+    pinctrl-0 = <&rm_io13_pwm1_ch0>;
+    assigned-clocks = <&cru CLK_PWM1>;
+    assigned-clock-rates = <100000000>;
+};
+
+&can0 { status = "disabled"; };
+&can1 { status = "disabled"; };
+&uart1 { status = "disabled"; };
+&uart3 { status = "disabled"; };
+
+/* SAI1 feeds the onboard es8388 codec; disabling the codec also
+   requires removing/disabling the es8388_sound card node that
+   references it (vanxoak-hd-rk3506-evb-v1.dtsi). */
+&sai1 { status = "disabled"; };
+```
+
+Note: a DTB rebuild is required in **both** variants (the stock image has
+spi0 and all pwm1 channels disabled); disabling unused peripherals does
+not avoid the rebuild, it only widens the pin choice while you are
+rebuilding anyway.
+
+## Last resort: no-rebuild wiring (stock image, as-is)
+
+Stock image: no spidev, no usable PWM chip (the only live one is claimed
+by the MIPI backlight). Everything runs as plain GPIO + bit-banged SPI.
+All pins verified unclaimed (`/sys/kernel/debug/gpio`).
+
+| LCM signal | JP4 pin | gpio number (sysfs) |
+|---|---|---|
+| GND | 6 | - |
+| V33 | 1 | - |
+| SCLK | 23 | **1** (GPIO0_A1) |
+| MOSI | 19 | **3** (GPIO0_A3) |
+| (MISO) | 21 | 6 (GPIO0_A6, unused by write-only panels) |
+| RESET | 29 | **49** (GPIO1_C1) |
+| DC | 33 | **47** (GPIO1_B7) |
+| CS | 31 | **48** (GPIO1_C0) |
+| BLK | 1 (V33) | tie high = full brightness; or JP4.37 = gpio 45 (GPIO1_B5) with userspace soft-PWM (jitter-prone) |
+
+Setup (GPIO uAPI or sysfs):
+
+```
+for g in 1 3 47 48 49; do
+  echo $g > /sys/class/gpio/export
+  echo out > /sys/class/gpio/gpio$g/direction
+done
+echo 1 > /sys/class/gpio/gpio49/value   # RES inactive
+```
+
+Bit-bang SPI mode 0, MSB first, on gpio 1 (clock) / 3 (data) with CS 48
+framing each transaction: sysfs writes give roughly 10-50 kHz - fine for
+occasional full-frame updates, too slow for animation. DC must toggle
+low before command bytes and high before data bytes.
+
