@@ -11,6 +11,7 @@ self-contained project with its own `Makefile` and `README.md`.
 | `coremark_cm0/` | CoreMark for the on-chip Cortex-M0 - SDK patch + status: does not fit 32 KB M0 RAM, and the stock image cannot load M0 code yet (see README) |
 | `ssd1317_md066_64x48_iic/` | SSD1317 64x48 I2C OLED demo (i2c-dev + GPIO uAPI), ported from the PocketBeagle reference - ~85 fps; `lcm_logo` shows the board's stock boot logo + scaled stock font |
 | `st7789_md169_240x280_spi/` | ST7789 1.69" 240x280 SPI TFT (MD169), ported from the f411 reference - software (bit-bang) version, ~3.5 s/full frame; hw-SPI + PWM backlight after the DTB rebuild |
+| `gpio_test/` | JP4 pin walker: blinks every free JP4 GPIO one by one for LED-probe verification; also forces bank0 RM_IO IOMUX nibbles to GPIO and reports their state |
 
 ## Common workflow (per project, from the project directory)
 

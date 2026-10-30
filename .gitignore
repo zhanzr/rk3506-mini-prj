@@ -13,5 +13,6 @@
 /app/hello/hello
 /app/ssd1317_md066_64x48_iic/lcm_logo
 /app/st7789_md169_240x280_spi/st7789_demo
+/app/gpio_test/gpio_test
 /app/ssd1317_md066_64x48_iic/ssd1317_demo
 Thumbs.db

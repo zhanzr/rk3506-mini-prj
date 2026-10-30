@@ -22,7 +22,7 @@ Driver facts carried over from the reference:
 | RESET | 29 | 49 (GPIO1_C1) | |
 | DC | 33 | 47 (GPIO1_B7) | |
 | CS | 24 | 7 (GPIO0_A7) | bit-banged (hw CSN0 needs DTB) |
-| BLK | 15 | 13 (GPIO0_B5) | **stock image muxes this pin to CAN1_TX** - drive is ineffective until the DTB disables CAN1; jumper BLK to V33 if the panel stays dark |
+| BLK | 15 | 13 (GPIO0_B5) | gpio mode confirmed (iomux nibble 0); JP4.17 (V33) also works - verified lit |
 
 Transport: GPIO char-device uAPI v2, two SET_VALUES ioctls per bit.
 Measured: **~3.5 s per full 240x280x16bpp frame (~309 kbit/s effective)**,
