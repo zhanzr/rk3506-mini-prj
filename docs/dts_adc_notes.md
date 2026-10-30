@@ -96,5 +96,9 @@ cat /sys/bus/iio/devices/iio:device0/in_voltage0_raw
   (`/sys/kernel/debug/clk/clk_summary`), **no cpufreq** driver - no
   governor, frequency does not change under load. Good benchmark
   repeatability.
+- The datasheet's "up to 1.5 GHz" is not reachable on this firmware: the
+  vendor DTS never enables the PWM behind `vdd_arm` (the CPU regulator),
+  so the kernel's DVFS stack fails at boot and the clock stays at the
+  U-Boot value. Full analysis and fix sketch: `cpu_clock_dvfs.md`.
 - BogoMIPS 48.00 (typical for A7 loop calibration, not a perf metric).
 - `taskset` available on the image for pinning.
