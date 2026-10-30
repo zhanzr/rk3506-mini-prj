@@ -69,6 +69,28 @@ Debugging: no cross-gdb in the SDK, no gdbserver on the target - printf
 debugging it is. (Could be added later by enabling `BR2_PACKAGE_GDB` and
 rebuilding the rootfs with the full SDK.)
 
+## Applications
+
+| App | What it drives | Notes |
+|---|---|---|
+| `app/hello` | - | toolchain smoke test |
+| `app/blink_hello` | LED2 (heartbeat) + SoC temp | LED class API, restores trigger on exit |
+| `app/coremark` / `app/coremark_cm0` | - | CPU benchmark (3x A7 @ 1.2 GHz, fixed clock - see `docs/cpu_clock_dvfs.md`) |
+| `app/ssd1317_md066_64x48_iic` | SSD1317 OLED 64x48 on I2C | stock boot logo + scaled stock fonts |
+| `app/ili9163c_md144_128x128_spi` | ILI9163C 1.44" 128x128, 3-wire 9-bit SPI | 60 fps @ hw SPI0; boot logo screen |
+| `app/st7789_md169_240x280_spi` | ST7789 1.69" 240x280, 4-wire SPI mode 0 | 22 fps full-frame; PWM backlight |
+| `app/st7789_md130_240x240` | ST7789 1.3" 240x240, 4-wire SPI **mode 3** | CS hardwired to GND on module |
+| `app/gpio_test` | JP4 pins | RM_IO iomux diagnostic walker |
+
+All LCD apps share the same demo flow (banner -> info -> inverted info
+-> TEST_STAND with dwell -> HSV gradient -> stock boot logo -> scaled
+fonts, fps counter, 11%/55% alternating backlight loops) and run on the
+**rebuilt-DTB image** (hardware SPI0 + PWM on JP4). How that image was
+produced and how the SPI transport works:
+**`docs/spi_howto.md`** (start there), `docs/jp4_spi_lcm.md` (pin
+budget + no-rebuild bit-bang fallback), `docs/graphics_stack_notes.md`
+(stock display chain).
+
 ## On-board LEDs
 
 | LED | GPIO | Kernel LED name | Default role |
@@ -149,6 +171,8 @@ DEBUG-TTL 3-pin: TXD / RXD / GND, 115200 8N1.
 
 ## References
 
+- `docs/spi_howto.md` - hardware SPI on JP4, as-built (DTB + kernel
+  fragment + userspace transport + panel quirks)
 - Vendor folder: `D:\board_database\rk3506-mini` (schematics, pin lists,
   datasheet, programming guides - see `docs/README.md`)
 - Rockchip RK3506 TRM and SDK docs in the SDK `docs/` tree
