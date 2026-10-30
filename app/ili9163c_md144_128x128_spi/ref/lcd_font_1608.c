@@ -2,7 +2,7 @@
   lcd_font_1608.c - 8x16 ASCII font (asc2_1608 grid, from the on-board LCD
   vendor example) used by the banner pages of the st7789-style demos.
 */
-#include "font_1608.h"
+#include "lcd_font_1608.h"
 
 const uint8_t asc2_1608[1520] = {
 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
@@ -103,3 +103,5 @@ const uint8_t asc2_1608[1520] = {
 
 };
 
+/* Bigger banner font: 8 px wide, 16 px tall, 16 bytes per glyph. */
+pFONT ASCII_Font16 = { asc2_1608, 8, 16, 16, 0 };

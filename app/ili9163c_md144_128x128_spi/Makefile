@@ -5,12 +5,12 @@ CROSS_FLAGS := -O2 -Wall -Wextra -march=armv7-a -mfpu=neon-vfpv4 -mfloat-abi=har
 LDLIBS     := -lm
 BOARD     ?= rk3506-buildroot
 BOARD_DIR ?= ili9163c_md144_128x128_spi
-SOURCES   := main.c lcd.c spi_hw.c font_1608.c spi_hw.h lcd.h font_1608.h Makefile README.md
+SOURCES   := main.c lcd.c spi_hw.c ref/lcd_font_1608.c ref/lcd_fonts.c spi_hw.h lcd.h ref/lcd_font_1608.h ref/lcd_fonts.h Makefile README.md
 
 all: $(TARGET)
 
-$(TARGET): main.c lcd.c spi_hw.c font_1608.c spi_hw.h lcd.h font_1608.h
-	$(CROSS)gcc $(CROSS_FLAGS) -o $@ main.c lcd.c spi_hw.c font_1608.c -lm
+$(TARGET): main.c lcd.c spi_hw.c ref/lcd_font_1608.c ref/lcd_fonts.c spi_hw.h lcd.h ref/lcd_font_1608.h ref/lcd_fonts.h
+	$(CROSS)gcc $(CROSS_FLAGS) -o $@ main.c lcd.c spi_hw.c ref/lcd_font_1608.c ref/lcd_fonts.c -lm
 
 push: $(TARGET)
 	ssh $(BOARD) "mkdir -p $(BOARD_DIR)"

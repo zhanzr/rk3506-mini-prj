@@ -1,18 +1,13 @@
 /*
-  main.c - ILI9163C 128x128 (MD144) demo for the rk3506-mini over
-  hardware SPI0 (/dev/spidev0.0), ported from the f411/f746 references.
-  Rasters stream via the 9-bit frame packer (bulk, CS held low across
-  288-byte chunks cut at frame boundaries).
+  main.c - ILI9163C 128x128 (MD144) demo for the rk3506-mini, faithful
+  port of the f411 reference main flow (hardware SPI0 path only).
 
-  Usage: ./ili9163c_demo [options]
-    -c N    CS gpio     (default 7  = JP4.24)
-    -r N    RES gpio    (default 49 = JP4.29)
-    -s N    SPI speed in kHz (default 40000; driver clamps)
-    -M hex  MADCTL value: 0x08 / 0x48 (X mirror) / 0x0C / 0x4C (MH too)
-    -m      mirror picker: cycles 4 MADCTL values showing text, 2.5 s each
-    -n      no INVON
-    -w      SPI speed sweep with checkerboard (report highest clean speed)
-    -1      exit after the first screen
+  The module is 3-wire serial: every byte is a 9-bit frame (D/C bit
+  clocked first); no D/C pin; backlight hardwired on-module.
+
+  Wiring (JP4): SCL=23 SDA=19 RES=29 CS=24; power on 1/6.
+  Reference MADCTL: 0x08. If text appears mirrored on this module batch,
+  note it - MADCTL lives in lcd.c LCD_IC_Init.
 */
 #include <stdio.h>
 #include <stdlib.h>
@@ -20,192 +15,314 @@
 #include <time.h>
 #include <unistd.h>
 
+#include "ref/lcd_fonts.h"
+#include "ref/lcd_font_1608.h"
 #include "lcd.h"
 #include "spi_hw.h"
 
-static double now_s(void)
-{
-    struct timespec ts;
+/* ---- screen layout (f411 reference) ---- */
+#define SCREEN_W   128
+#define SCREEN_H   128
+#define FPS_BAND   20
+#define ANIM_H     (SCREEN_H - FPS_BAND)
+#define BACK_COLOR LCD_BLACK
+#define INFO_DY    13
 
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (double)ts.tv_sec + (double)ts.tv_nsec / 1e9;
+/* ---- FPS counter ---- */
+static volatile uint32_t g_frames;
+static uint32_t g_last_frames;
+static uint32_t g_fps_last_tick;
+static uint32_t g_fps_color = LCD_WHITE;
+
+static void fps_frame(void)
+{
+    g_frames++;
 }
 
-static void usage(void)
+static void fps_update(void)
 {
-    printf("usage: ili9163c_demo [-c cs] [-r res] [-s kHz] [-M hex] "
-           "[-m] [-n] [-w] [-1]\n");
-}
+    uint32_t now = LCD_GetTick();
 
-static void screens(void)
-{
-    printf("  red / green / blue / white / black\n");
-    disp_color(RED);   sleep(1);
-    disp_color(GREEN); sleep(1);
-    disp_color(BLUE);  sleep(1);
-    disp_color(WHITE); sleep(1);
-    disp_color(BLACK); sleep(1);
-
-    printf("  8-color band\n");
-    disp_band();       sleep(2);
-
-    printf("  frame border\n");
-    disp_frame();      sleep(2);
-
-    printf("  horizontal gray ramp (16 steps)\n");
-    disp_gray_hor16(); sleep(2);
-
-    printf("  checkerboard\n");
-    disp_checker();    sleep(2);
-
-    printf("  1-px vertical stripes\n");
-    disp_vstripes();   sleep(2);
-
-    printf("  lines + circles\n");
-    disp_color(BLACK);
-    lcd_draw_line(0, 0, 127, 127, RED);
-    lcd_draw_line(127, 0, 0, 127, GREEN);
-    lcd_draw_circle(64, 64, 40, CYAN);
-    lcd_draw_circle(64, 64, 20, YELLOW);
-    lcd_fill_circle(64, 64, 8, MAGENTA);
-    sleep(2);
-
-    printf("  stock boot logo (2x) + caption\n");
-    lcd_show_logo();   sleep(3);
-
-    printf("  text overlay\n");
-    lcd_fill_rect(0, 112, 128, 16, BLACK);
-    lcd_draw_string(8, 112, "RK3506 128x128", YELLOW, BLACK);
-    sleep(2);
-}
-
-/* mirror picker: cycles the 4 plausible MADCTL values so the user can
- * pick the one where text reads correctly */
-static void mirror_pick(void)
-{
-    static const unsigned vals[4] = { 0x08, 0x48, 0x88, 0xC8 };
-
-    for (int i = 0; i < 4; i++)
+    if (now - g_fps_last_tick >= 1000)
     {
-        printf("MADCTL 0x%02X - correct if text reads normally AND the "
-               "red bar is on the LEFT\n", vals[i]);
-        write_comm(0x36);                 /* apply MADCTL live */
-        write_data8((uint8_t)vals[i]);
-        disp_color(BLACK);
-        lcd_fill_rect(0, 0, 6, 128, RED); /* direction marker */
-        lcd_draw_string(16, 24, "MIRROR TEST", WHITE, BLACK);
-        {
-            char buf[16];
+        uint32_t fps = g_frames - g_last_frames;
 
-            snprintf(buf, sizeof(buf), "MADCTL 0x%02X", vals[i]);
-            lcd_draw_string(16, 48, buf, YELLOW, BLACK);
+        g_last_frames = g_frames;
+        g_fps_last_tick = now;
+        {
+            char buf[8];
+
+            buf[0] = 'F'; buf[1] = 'P'; buf[2] = 'S'; buf[3] = ':';
+            buf[4] = (char)('0' + (fps / 100) % 10);
+            buf[5] = (char)('0' + (fps / 10) % 10);
+            buf[6] = (char)('0' + fps % 10);
+            buf[7] = '\0';
+            LCD_SetColor(g_fps_color);
+            LCD_ShowTransparent(1);
+            LCD_DisplayString(1, (uint16_t)(ANIM_H + 4), buf);
+            LCD_ShowTransparent(0);
         }
-        lcd_draw_string(16, 72, "bar left = OK", CYAN, BLACK);
-        sleep(3);
     }
-    /* leave the first value active; pass -M <picked> to the demo */
-    write_comm(0x36);
-    write_data8((uint8_t)vals[0]);
 }
 
-static void speed_sweep(unsigned base_khz __attribute__((unused)))
+static void paint_fps_band(void)
 {
-    static const unsigned sweep_khz[] = { 8000, 12000, 16000, 20000,
-                                          26000, 32000, 40000 };
+    LCD_SetColor(BACK_COLOR);
+    LCD_SetBackColor(BACK_COLOR);
+    LCD_FillRect(0, (uint16_t)ANIM_H, SCREEN_W, FPS_BAND);
+}
 
-    for (unsigned i = 0; i < sizeof(sweep_khz) / sizeof(sweep_khz[0]); i++)
+static void delay_with_fps(uint32_t ms)
+{
+    uint32_t start = LCD_GetTick();
+
+    do
     {
-        printf("sweep %u kHz: checkerboard + band (watch for corruption)\n",
-               sweep_khz[i]);
-        if (spi_set_speed(sweep_khz[i] * 1000) != 0)
-        {
-            printf("  speed not accepted, stopping sweep\n");
-            break;
-        }
-        disp_checker();
-        sleep(2);
-        disp_band();
-        sleep(2);
+        fps_update();
+        usleep(50000);
+    } while (LCD_GetTick() - start < ms);
+}
+
+/* ---- HSV gradient sweep ---- */
+static uint32_t hsv_to_rgb(int h, int s, int v)
+{
+    int region = (h / 600) % 6;
+    int fpart  = h % 600;
+    int p = v * (255 - s) / 255;
+    int q = v * (255 - (s * fpart) / 600) / 255;
+    int t = v * (255 - (s * (600 - fpart)) / 600) / 255;
+    int r, g, b;
+
+    switch (region)
+    {
+    case 0: r = v; g = t; b = p; break;
+    case 1: r = q; g = v; b = p; break;
+    case 2: r = p; g = v; b = t; break;
+    case 3: r = p; g = q; b = v; break;
+    case 4: r = t; g = p; b = v; break;
+    default:r = v; g = p; b = q; break;
     }
-    printf("sweep done - report the highest clean speed\n");
+    return ((uint32_t)r << 16) | ((uint32_t)g << 8) | (uint32_t)b;
+}
+
+static void draw_gradient(int hue_a, int hue_b, uint16_t *row)
+{
+    for (int y = 0; y < ANIM_H; y++)
+    {
+        int frac = y * 1000 / ANIM_H;
+        int hue  = hue_a + (hue_b - hue_a) * frac / 1000;
+        uint32_t c = hsv_to_rgb(hue, 255, 255);
+        uint16_t rgb565 = (uint16_t)(((c >> 8) & 0xF800) |
+                                     ((c >> 5) & 0x07E0) |
+                                     ((c >> 3) & 0x001F));
+
+        for (int x = 0; x < SCREEN_W; x++)
+            row[x] = rgb565;
+        LCD_CopyBuffer(0, (uint16_t)y, SCREEN_W, 1, row);
+    }
+}
+
+static void gradient_demo(uint32_t ms)
+{
+    static uint16_t row[SCREEN_W];
+
+    LCD_SetBackColor(BACK_COLOR);
+    paint_fps_band();
+
+    uint32_t start = LCD_GetTick();
+    uint32_t t = 0;
+
+    do
+    {
+        int hue_a = (int)(t * 3600 / ms);
+        int hue_b = hue_a + 1800;
+
+        if (hue_b >= 3600)
+            hue_b -= 3600;
+        draw_gradient(hue_a, hue_b, row);
+        fps_frame();
+        fps_update();
+        t = LCD_GetTick() - start;
+    } while (t < ms);
+}
+
+/* ---- vendor TEST_STAND screens ---- */
+static void TEST_STAND(void)
+{
+    DispFrame();
+    StopDelay(Delay_Time);
+
+    DispGrayHor16();
+    StopDelay(Delay_Time);
+
+    DispBand();
+    StopDelay(Delay_Time);
+
+    DispColor(LCD_RED);   StopDelay(Delay_Time);
+    DispColor(LCD_GREEN); StopDelay(Delay_Time);
+    DispColor(LCD_BLUE);  StopDelay(Delay_Time);
+    DispColor(LCD_WHITE); StopDelay(Delay_Time);
+    DispColor(LCD_BLACK); StopDelay(Delay_Time);
+}
+
+/* ---- info page ---- */
+static void info_demo(uint32_t ms, uint8_t invert)
+{
+    char buf[24];
+    char comp[24];
+    unsigned long mhz = 1200UL; /* fixed armclk, see docs/cpu_clock_dvfs.md */
+    uint32_t fg = invert ? LCD_BLACK : LCD_WHITE;
+    uint32_t bg = invert ? LCD_WHITE : LCD_BLACK;
+
+#if defined(__clang__)
+    snprintf(comp, sizeof comp, "Clang %d.%d", __clang_major__,
+             __clang_minor__);
+#elif defined(__GNUC__)
+    snprintf(comp, sizeof comp, "GCC %d.%d.%d",
+             __GNUC__, __GNUC_MINOR__, __GNUC_PATCHLEVEL__);
+#else
+    snprintf(comp, sizeof comp, "unknown");
+#endif
+
+    printf("[LCD] info%s: compiler=%s build=%s %s\n",
+           invert ? " (inverted)" : "", comp, __DATE__, __TIME__);
+    printf("[LCD] info: freq=%lu MHz drive=HW SPI0 (packed 9-bit)\n", mhz);
+
+    LCD_SetColor(fg);
+    LCD_SetBackColor(bg);
+    LCD_Clear();
+
+    LCD_SetColor(bg);
+    LCD_SetBackColor(bg);
+    LCD_FillRect(0, (uint16_t)ANIM_H, SCREEN_W, FPS_BAND);
+    LCD_SetColor(fg);
+    LCD_SetBackColor(bg);
+    g_fps_color = fg;
+
+    const int ix = 2;
+    int y = 2;
+
+    snprintf(buf, sizeof buf, "%s", comp);
+    LCD_DisplayString((uint16_t)ix, (uint16_t)y, buf); y = (uint16_t)(y + INFO_DY);
+
+    snprintf(buf, sizeof buf, "Build %s", __DATE__);
+    LCD_DisplayString((uint16_t)ix, (uint16_t)y, buf); y = (uint16_t)(y + INFO_DY);
+
+    snprintf(buf, sizeof buf, "Freq %lu MHz", mhz);
+    LCD_DisplayString((uint16_t)ix, (uint16_t)y, buf); y = (uint16_t)(y + INFO_DY);
+
+    snprintf(buf, sizeof buf, "SPI0 40 MHz (HW)");
+    LCD_DisplayString((uint16_t)ix, (uint16_t)y, buf); y = (uint16_t)(y + INFO_DY);
+
+    snprintf(buf, sizeof buf, "SCL=23 SDA=19");
+    LCD_DisplayString((uint16_t)ix, (uint16_t)y, buf); y = (uint16_t)(y + INFO_DY);
+
+    snprintf(buf, sizeof buf, "RST=29 CS=24");
+    LCD_DisplayString((uint16_t)ix, (uint16_t)y, buf); y = (uint16_t)(y + INFO_DY);
+
+    snprintf(buf, sizeof buf, "UID 79a8bf52");
+    LCD_DisplayString((uint16_t)ix, (uint16_t)y, buf);
+
+    g_fps_color = LCD_WHITE;
+
+    uint32_t start = LCD_GetTick();
+
+    do
+    {
+        fps_update();
+        usleep(50000);
+    } while (LCD_GetTick() - start < ms);
+}
+
+/* ---- big-font banner page ---- */
+static void banner_page(const char *l1, const char *l2,
+                        uint32_t fg, uint32_t bg, uint32_t ms)
+{
+    g_fps_color = fg;
+
+    LCD_SetAsciiFont(&ASCII_Font16);
+    LCD_SetColor(fg);
+    LCD_SetBackColor(bg);
+    LCD_Clear();
+    LCD_SetColor(bg);
+    LCD_SetBackColor(bg);
+    LCD_FillRect(0, (uint16_t)ANIM_H, SCREEN_W, FPS_BAND);
+    LCD_SetColor(fg);
+    LCD_SetBackColor(bg);
+
+    LCD_DisplayString(12, 40, (char *)l1);
+    LCD_DisplayString(12, 64, (char *)l2);
+
+    usleep(ms * 1000);
+
+    LCD_SetAsciiFont(&ASCII_Font12);
+    g_fps_color = LCD_WHITE;
+}
+
+/* ---- full pattern set ---- */
+static void run_patterns(void)
+{
+    printf("[LCD] phase: info\n");
+    info_demo(5000, 0);
+
+    printf("[LCD] phase: info (inverted colors)\n");
+    info_demo(5000, 1);
+
+    printf("[LCD] phase: vendor TEST_STAND\n");
+    TEST_STAND();
+
+    printf("[LCD] phase: gradient\n");
+    gradient_demo(1000);
 }
 
 int main(int argc, char **argv)
 {
-    double t0, t1;
-    int cs = 7, res = 49;
     unsigned speed_khz = 40000;
-    int invon = 1, sweep = 0, one = 0, mpick = 0;
-    unsigned madctl = 0x48;
 
     setvbuf(stdout, NULL, _IONBF, 0);
-
     for (int i = 1; i < argc; i++)
     {
         if (argv[i][0] == '-' && argv[i][1] && !argv[i][2])
         {
             switch (argv[i][1])
             {
-            case 'c': cs  = atoi(argv[++i]); break;
-            case 'r': res = atoi(argv[++i]); break;
             case 's': speed_khz = (unsigned)atoi(argv[++i]); break;
-            case 'M': madctl = (unsigned)strtoul(argv[++i], NULL, 16); break;
-            case 'n': invon = 0; break;
-            case 'w': sweep = 1; break;
-            case 'm': mpick = 1; break;
-            case '1': one = 1; break;
-            default:  usage(); return 1;
+            default:  printf("usage: ili9163c_demo [-s speed_kHz]\n");
+                      return 1;
             }
         }
         else
         {
-            usage();
+            printf("usage: ili9163c_demo [-s speed_kHz]\n");
             return 1;
         }
     }
 
-    lcd_set_madctl((uint8_t)madctl);
-    lcd_set_inversion(invon);
+    printf("ILI9163C 1.44\" 128x128, 3-wire serial (9-bit frames: D/C bit "
+           "+ 8 data):\n");
+    printf("SCL=JP4.23 SDA=JP4.19 RES=JP4.29 CS=JP4.24; no DC pin "
+           "(in-protocol), backlight hardwired on-module\n");
+
     if (spi_open(speed_khz * 1000) != 0)
         return 1;
-    spi_res_open(res);
+    spi_res_open(29);
 
-    printf("ILI9163C MD144 128x128 on hw SPI0: CS=gpio%d RES=gpio%d "
-           "speed=%u kHz MADCTL=0x%02X invon=%d\n",
-           cs, res, speed_khz, madctl, invon);
+    LCD_Init();
+    LCD_SetAsciiFont(&ASCII_Font12);
+    paint_fps_band();
 
-    if (mpick)
+    /* the f411 reference loops forever between soft and HW buses; here
+     * there is only the HW SPI0 path */
+    for (;;)
     {
-        mirror_pick();
-        spi_close();
-        return 0;
+        printf("[LCD] phase: HARDWARE banner\n");
+        banner_page("now will do", "HW SPI0 test",
+                    LCD_BLACK, LCD_CYAN, 3000);
+
+        printf("[LCD] running patterns on HARDWARE SPI0 @ %u MHz\n",
+               speed_khz / 1000);
+        run_patterns();
     }
 
-    t0 = now_s();
-    lcd_init();
-    t1 = now_s();
-    printf("init done in %.2f s\n", t1 - t0);
-
-    printf("screen 1: solid red\n");
-    t0 = now_s();
-    disp_color(RED);
-    t1 = now_s();
-    printf("  %.3f s/frame (%.2f fps, %.0f kbit/s effective)\n",
-           t1 - t0, 1.0 / (t1 - t0),
-           294912.0 / (t1 - t0) / 1000.0);
-    if (one)
-    {
-        printf("one-screen mode\n");
-        spi_close();
-        return 0;
-    }
-
-    screens();
-
-    if (sweep)
-        speed_sweep(speed_khz);
-
-    printf("done - screen keeps the last frame\n");
-    spi_close();
     return 0;
 }
