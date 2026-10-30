@@ -131,16 +131,26 @@ static void frame(uint8_t dc, uint8_t byte)
 
 void spi_cmd(uint8_t b)
 {
-    buf_flush();                 /* CS rise ends any partial frame */
+    buf_flush();                 /* end any pending partial frame */
     frame(0, b);
-    buf_flush();                 /* CS rise: frame complete */
+    /* 9-bit frame spans 2 bytes: pad bit 9 into byte 2, then CS rise -
+     * frame complete, padding bits discarded */
+    if (s_nbits % 8)
+        buf_put((uint8_t)((s_acc << (8 - (s_nbits % 8))) & 0xFF));
+    buf_flush();
+    s_acc = 0;
+    s_nbits = 0;
 }
 
 void spi_data8(uint8_t b)
 {
     buf_flush();
     frame(1, b);
+    if (s_nbits % 8)
+        buf_put((uint8_t)((s_acc << (8 - (s_nbits % 8))) & 0xFF));
     buf_flush();
+    s_acc = 0;
+    s_nbits = 0;
 }
 
 void spi_stream_begin(void)
@@ -157,10 +167,8 @@ void spi_stream_word(uint16_t v)
     frame(1, (uint8_t)(v & 0xFF));
     /* flush in 9-byte groups (8 complete frames) - CS rises exactly at
      * a frame boundary, never mid-frame */
-    if (s_len >= STREAM_BUF - 3 && s_len % 9 == 0)
-        buf_flush();
-    else if (s_len >= STREAM_BUF - 3)
-        buf_flush(); /* fallback: shouldn't happen (s_len stays %9==0) */
+    if (s_len >= STREAM_BUF - 9 && s_len % 9 == 0)
+        buf_flush();  /* 279 bytes = 248 complete frames - CS-safe */
 }
 
 void spi_stream_end(void)
