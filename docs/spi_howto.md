@@ -260,6 +260,25 @@ echo 1 > .../pwm0/enable
 | hw SPI0, per-pixel 2-byte `write()`s | ~130 kByte/s | ~2.1 s |
 | hw SPI0, bulk chunked rasters (4096 B) | ~3 MByte/s @ 40 MHz req. | **45 ms @ 240x280** (22 fps), 16 ms @ 128x128 (60 fps) |
 | Gradient sweep (row-colored bulk writes) | - | 29-30 fps @ 240x280 |
+| hw SPI0 @ **93.75 MHz** (ST7365P panel) | ~5.9 MByte/s | 52 ms @ 320x480 (19 fps); 15 fps live UVC camera viewer incl. decode |
+
+### Reaching > 50 MHz (the two hidden clamps)
+
+`clk_spi0` runs at 187.5 MHz, so 93.75 MHz (divider /2) is electrically
+there - but two independent software clamps must be lifted first:
+
+1. **DTB**: the spidev node's `spi-max-frequency` (stock: 50 MHz).
+   The SPI core silently clamps every transfer to it. Set it to
+   100000000 in `vanxoak-hd-rk3506g-evb-sd-v1.dts` (deployed).
+2. **Driver**: `drivers/spi/spi-rockchip.c` hard-codes
+   `#define MAX_SCLK_OUT 50000000U` - the controller cap, applied
+   regardless of the DT. Patched to 100000000U (deployed).
+
+Measured before/after (ST7365P 320x480 full-frame bulk write):
+requested 60 MHz -> 71 ms (clamped 50 MHz); requested 100 MHz ->
+52 ms (93.75 MHz actual) after both patches. Panel verified stable
+on JP4 jumper wiring at that rate (ST7365P; the ST7789 modules have
+not been pushed past 40 MHz).
 
 Lesson: the per-`write()` syscall overhead dominates; always stream
 whole rows/frames through `spi_write_pixels16()`/`fill_bulk16()`-style
