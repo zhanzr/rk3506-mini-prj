@@ -31,6 +31,25 @@ limitation replaced by the board's **PWM1 ch0 backlight** (JP4.15,
 - the glass has an inactive border outside the 320x480 active area
   (renders as a light strip, no content)
 
+## Port status (from the opz-dev original, 10 apps)
+
+| App | Status | Notes |
+|---|---|---|
+| `lcm_test` | **works** | 100 MHz default, PWM backlight 11%/55% |
+| `uvc_to_lcd` | **works** | 15 fps C920 viewer @ 93.75 MHz SPI |
+| `whiteband_test` | **works** | write-path isolator, rows 0..27 |
+| `face_detect` | **works** | libfacedetect CNN (NEON), live boxes |
+| `face_pico` | **works** | pico cascade, live boxes |
+| `object_detect` | **works** | Yolo-Fastest COCO-80 on ncnn; needs vendored libgomp (toolchain + board image have none - Debian armhf libgomp1 shipped in `vendor/`) |
+| `person_vis` | **works** | TFLM MLPerf-Tiny, PERSON/NO PERSON verdict |
+| `wake_word` | **starts, audio N/A** | TFLM + ALSA load fine; the app targets opz ALSA card 0 and this board's codec (es8388) has **unconnected mic inputs** - no microphone exists on the EVB, so capture yields silence (see main README ADC section) |
+| `qr_scan` | **not ported yet** | opz linked system zbar; the Buildroot image has no zbar - needs a cross-built libzbar (todo) |
+| `ped_detect` | **not ported** | opz built natively against libopencv-dev; the board image has no OpenCV and a full cross-OpenCV is out of scope (todo) |
+
+All working apps: SPI0 @ 100 MHz request (93.75 MHz actual), PWM
+backlight 55%, camera auto-detect via the rk3506 USB host
+(`ff780000` -> uh-0).
+
 ## Apps
 
 - `lcm_test/` - bring-up demo: banner, info pages, TEST_STAND (write
