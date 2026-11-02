@@ -237,6 +237,38 @@ static pthread_mutex_t cap_state_lock = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t cap_state_cond = PTHREAD_COND_INITIALIZER;
 static const char *cap_dev = "default";
 
+/* rk3506-mini: "default" resolves to the (unwired) es8388 codec. The
+ * usable microphone is the UVC webcam's USB Audio device - find it in
+ * /proc/asound/cards and use its plughw. */
+static const char *find_usb_audio_dev(void)
+{
+    FILE *fp = fopen("/proc/asound/cards", "r");
+    char line[128];
+    static char dev[32];
+
+    if (!fp)
+        return NULL;
+    /* one line per card: " 0 [C920 ]: USB-Audio - HD Pro Webcam C920" */
+    while (fgets(line, sizeof(line), fp))
+    {
+        const char *p = line;
+        int n;
+
+        while (*p == ' ' || *p == '\t')
+            p++;
+        n = atoi(p);
+        if (isdigit((unsigned char)p[0]) && p[1] == ' ' &&
+            n >= 0 && n <= 9 &&
+            (strstr(p, "USB-Audio") || strstr(line, "USB Audio")))
+        {
+            snprintf(dev, sizeof(dev), "plughw:CARD=%d,DEV=0", n);
+            fclose(fp);
+            return dev;
+        }
+    }
+    fclose(fp);
+    return NULL;
+}
 static void set_capture_state(cap_state state)
 {
     pthread_mutex_lock(&cap_state_lock);
@@ -257,6 +289,14 @@ static void *cap_thread(void *arg)
 {
     (void)arg;
     snd_pcm_t *pcm = NULL;
+    if (strcmp(cap_dev, "default") == 0)
+    {
+        const char *usb = find_usb_audio_dev();
+
+        if (usb)
+            cap_dev = usb;
+        printf("alsa: capture device %s\n", cap_dev);
+    }
     int err = snd_pcm_open(&pcm, cap_dev, SND_PCM_STREAM_CAPTURE,
                            SND_PCM_NONBLOCK);
     if (err < 0)
