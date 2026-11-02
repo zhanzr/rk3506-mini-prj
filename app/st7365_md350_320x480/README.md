@@ -43,7 +43,7 @@ limitation replaced by the board's **PWM1 ch0 backlight** (JP4.15,
 | `object_detect` | **works** | Yolo-Fastest COCO-80 on ncnn; needs vendored libgomp (toolchain + board image have none - Debian armhf libgomp1 shipped in `vendor/`) |
 | `person_vis` | **works** | TFLM MLPerf-Tiny, PERSON/NO PERSON verdict |
 | `wake_word` | **starts, audio N/A** | TFLM + ALSA load fine; the app targets opz ALSA card 0 and this board's codec (es8388) has **unconnected mic inputs** - no microphone exists on the EVB, so capture yields silence (see main README ADC section) |
-| `qr_scan` | **not ported yet** | opz linked system zbar; the Buildroot image has no zbar - needs a cross-built libzbar (todo) |
+| `qr_scan` | **works** | QR/barcode readout over the live view; libzbar 0.23.92 cross-built (image-scanning only, no X/video/GTK) and vendored |
 | `ped_detect` | **not ported** | opz built natively against libopencv-dev; the board image has no OpenCV and a full cross-OpenCV is out of scope (todo) |
 
 All working apps: SPI0 @ 100 MHz request (93.75 MHz actual), PWM

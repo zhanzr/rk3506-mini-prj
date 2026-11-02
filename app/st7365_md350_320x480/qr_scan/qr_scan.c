@@ -32,6 +32,58 @@
 #include "lcd_fonts.h"
 #include "lcd_font_1608.h"
 
+/* ---- backlight PWM (JP4.15, pwm1_8ch_0 @ ff170000, rk3506-mini) ----
+ * 200 kHz normal polarity, fixed 55% (bright enough to judge detection
+ * results). The opz board had BLK hardwired to 3.3 V - no PWM there. */
+#define BL_PERIOD_NS 5000
+
+static int g_bl_pct = -1;
+
+static void backlight_init(void)
+{
+    char path[128];
+    FILE *fp;
+
+    snprintf(path, sizeof(path), "/sys/class/pwm/pwmchip0/export");
+    fp = fopen(path, "w");
+    if (fp) { fprintf(fp, "0"); fclose(fp); }
+
+    snprintf(path, sizeof(path), "/sys/class/pwm/pwmchip0/pwm0/enable");
+    fp = fopen(path, "w");
+    if (fp) { fprintf(fp, "0"); fclose(fp); }
+
+    snprintf(path, sizeof(path), "/sys/class/pwm/pwmchip0/pwm0/polarity");
+    fp = fopen(path, "w");
+    if (fp) { fprintf(fp, "normal"); fclose(fp); }
+
+    snprintf(path, sizeof(path), "/sys/class/pwm/pwmchip0/pwm0/duty_cycle");
+    fp = fopen(path, "w");
+    if (fp) { fprintf(fp, "0"); fclose(fp); }
+
+    snprintf(path, sizeof(path), "/sys/class/pwm/pwmchip0/pwm0/period");
+    fp = fopen(path, "w");
+    if (fp) { fprintf(fp, "%d", BL_PERIOD_NS); fclose(fp); }
+}
+
+static void backlight_set(int percent)
+{
+    char path[128];
+    FILE *fp;
+
+    if (percent == g_bl_pct)
+        return;
+    g_bl_pct = percent;
+
+    snprintf(path, sizeof(path), "/sys/class/pwm/pwmchip0/pwm0/duty_cycle");
+    fp = fopen(path, "w");
+    if (fp) { fprintf(fp, "%d", BL_PERIOD_NS * percent / 100); fclose(fp); }
+
+    snprintf(path, sizeof(path), "/sys/class/pwm/pwmchip0/pwm0/enable");
+    fp = fopen(path, "w");
+    if (fp) { fprintf(fp, "1"); fclose(fp); }
+}
+
+
 #define PANEL_W 320
 #define PANEL_H 480
 #define FPS_BAND 24
@@ -393,57 +445,6 @@ static void scan_msleep(void)
     struct timespec sl = { 0, 100 * 1000 * 1000 };
 
     nanosleep(&sl, NULL);
-}
-
-/* ---- backlight PWM (JP4.15, pwm1_8ch_0 @ ff170000, rk3506-mini) ----
- * 200 kHz normal polarity, fixed 55% (bright enough to judge detection
- * results). The opz board had BLK hardwired to 3.3 V - no PWM there. */
-#define BL_PERIOD_NS 5000
-
-static int g_bl_pct = -1;
-
-static void backlight_init(void)
-{
-    char path[128];
-    FILE *fp;
-
-    snprintf(path, sizeof(path), "/sys/class/pwm/pwmchip0/export");
-    fp = fopen(path, "w");
-    if (fp) { fprintf(fp, "0"); fclose(fp); }
-
-    snprintf(path, sizeof(path), "/sys/class/pwm/pwmchip0/pwm0/enable");
-    fp = fopen(path, "w");
-    if (fp) { fprintf(fp, "0"); fclose(fp); }
-
-    snprintf(path, sizeof(path), "/sys/class/pwm/pwmchip0/pwm0/polarity");
-    fp = fopen(path, "w");
-    if (fp) { fprintf(fp, "normal"); fclose(fp); }
-
-    snprintf(path, sizeof(path), "/sys/class/pwm/pwmchip0/pwm0/duty_cycle");
-    fp = fopen(path, "w");
-    if (fp) { fprintf(fp, "0"); fclose(fp); }
-
-    snprintf(path, sizeof(path), "/sys/class/pwm/pwmchip0/pwm0/period");
-    fp = fopen(path, "w");
-    if (fp) { fprintf(fp, "%d", BL_PERIOD_NS); fclose(fp); }
-}
-
-static void backlight_set(int percent)
-{
-    char path[128];
-    FILE *fp;
-
-    if (percent == g_bl_pct)
-        return;
-    g_bl_pct = percent;
-
-    snprintf(path, sizeof(path), "/sys/class/pwm/pwmchip0/pwm0/duty_cycle");
-    fp = fopen(path, "w");
-    if (fp) { fprintf(fp, "%d", BL_PERIOD_NS * percent / 100); fclose(fp); }
-
-    snprintf(path, sizeof(path), "/sys/class/pwm/pwmchip0/pwm0/enable");
-    fp = fopen(path, "w");
-    if (fp) { fprintf(fp, "1"); fclose(fp); }
 }
 
 int main(int argc, char **argv)
