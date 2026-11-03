@@ -6,7 +6,7 @@
   `config.json` sitting next to the executable (log_config_from_argv).
 
   A subset of every app's printf() calls was converted to log_printf();
-  per-frame/per-second status chatter is LOG_LEVEL_DEBUG and is hidden
+  per-frame/per-second status chatter is LOG_LVL_DEBUG and is hidden
   at the default `info` level.
 */
 #ifndef LOG_H
