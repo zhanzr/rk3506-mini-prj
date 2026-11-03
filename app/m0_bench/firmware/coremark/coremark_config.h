@@ -5,12 +5,14 @@
 #ifndef COREMARK_CONFIG_H_
 #define COREMARK_CONFIG_H_
 
-#define COMPILER_FLAGS "-mcpu=cortex-m0 -Os"
+#define COMPILER_FLAGS "-mcpu=cortex-m0 -mthumb -O2 -flto"
 
 /* Configuration for ARM Cortex-M0 */
 //#define COMPILER_FLAGS "-mcpu=cortex-m0"
 
-#define ITERATIONS 5000
+#ifndef ITERATIONS
+#define ITERATIONS 10000
+#endif
 /* Configuration for uncache */
 //#define ITERATIONS 500
 

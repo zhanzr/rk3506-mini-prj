@@ -8,7 +8,7 @@ self-contained project with its own `Makefile` and `README.md`.
 | `hello/` | Minimal hello world - proves the cross toolchain + deploy loop |
 | `blink_hello/` | Hello world + LED2 (`/sys/class/leds/run`, heartbeat) blinker + SoC temperature sampling |
 | `coremark/` | EEMBC CoreMark 1.0, ARM and Thumb-2 variants (results in its README) |
-| `coremark_cm0/` | CoreMark for the on-chip Cortex-M0 - SDK patch + status: does not fit 32 KB M0 RAM, and the stock image cannot load M0 code yet (see README) |
+| `m0_bench/` | Standalone Cortex-M0 firmware, Linux runtime loader, GPIO CoreMark runner, and historical vendor-HAL attempt; validated on the live board (see README) |
 | `ssd1317_md066_64x48_iic/` | SSD1317 64x48 I2C OLED demo (i2c-dev + GPIO uAPI), ported from the PocketBeagle reference - ~85 fps; `lcm_logo` shows the board's stock boot logo + scaled stock font |
 | `st7789_md169_240x280_spi/` | ST7789 1.69" 240x280 SPI TFT (MD169), ported from the f411 reference - software (bit-bang) version, ~3.5 s/full frame; hw-SPI + PWM backlight after the DTB rebuild |
 | `ili9163c_md144_128x128_spi/` | ILI9163C 1.44" 128x128 SPI LCD (MD144), 3-wire 9-bit frames (no D/C pin), ported from the f411 reference - ~0.5 s/frame bit-banged |

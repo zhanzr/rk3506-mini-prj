@@ -6,8 +6,9 @@ boots from TF card, Buildroot Linux).
 
 Board OS: vendor Buildroot image, kernel `6.1.118`
 (`/etc/os-release`: `linux-6.1-stan-rkr4.3`), ~98 MB RAM, 3 A7 cores visible
-to Linux, TF-card rootfs. The Cortex-M0 is used by the vendor AMP/RT-Thread
-firmware (not exercised by this repo yet).
+to Linux, TF-card rootfs. The image has no boot-time AMP/RPMsg integration,
+but `app/m0_bench/` verifies that a bare-metal Cortex-M0 image can be loaded
+and run from Linux without reflashing the board.
 
 ![rk3506-mini board](board_images/board_0.jpg)
 
@@ -84,7 +85,8 @@ rebuilding the rootfs with the full SDK.)
 |---|---|---|
 | `app/hello` | - | toolchain smoke test |
 | `app/blink_hello` | LED2 (heartbeat) + SoC temp | LED class API, restores trigger on exit |
-| `app/coremark` / `app/coremark_cm0` | - | CPU benchmark (3x A7 @ 1.2 GHz, fixed clock - see `docs/cpu_clock_dvfs.md`) |
+| `app/coremark` | - | A7 CPU benchmark (3x Cortex-A7 @ 1.2 GHz, fixed clock - see `docs/cpu_clock_dvfs.md`) |
+| `app/m0_bench` | GPIO1_C0 | Runtime-loaded M0 liveness and CoreMark (CRC-validated, host-timed 308.71 iterations/s); vendor-HAL experiment kept in the same folder |
 | `app/ssd1317_md066_64x48_iic` | SSD1317 OLED 64x48 on I2C | stock boot logo + scaled stock fonts |
 | `app/ili9163c_md144_128x128_spi` | ILI9163C 1.44" 128x128, 3-wire 9-bit SPI | 60 fps @ hw SPI0; boot logo screen |
 | `app/st7789_md169_240x280_spi` | ST7789 1.69" 240x280, 4-wire SPI mode 0 | 22 fps full-frame; PWM backlight |

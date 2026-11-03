@@ -24,16 +24,18 @@ the running board.
 
 ## Firmware build paths (vendor SDK)
 
-Two supported stacks for the M0, both in the local SDK:
+The local SDK includes the bare-metal HAL project. The MCU RT-Thread BSP
+documented by Rockchip is not present in this SDK copy.
 
 | Stack | Project | Toolchain | Build |
 |---|---|---|---|
 | Bare-metal RK HAL | `hal/project/rk3506-mcu` | `prebuilts/gcc/linux-x86/arm/gcc-arm-none-eabi-10-2020-q4` | `make` in `GCC/` -> `TestDemo.bin/elf` |
-| RT-Thread | `rtos/bsp/rockchip/rk3506-mcu` | same | `make` (SCons for AP targets only) |
+| RT-Thread MCU BSP | Not present in this SDK copy | - | Not available here |
 
 The HAL project already includes the benchmark middleware
-(`middleware/benchmark`, CoreMark/Linpack/tinymembench; see
-`app/coremark_cm0/` for the CoreMark port attempt).
+(`middleware/benchmark`, CoreMark/Linpack/tinymembench); the earlier vendor-HAL
+CoreMark integration attempt and its patch are archived in
+`app/m0_bench/vendor_hal_experiment/`.
 
 Packaging: `mcu.bin` is wrapped into a FIT image (`device/rockchip/rk3506/
 amp_mcu.its`, `type = "standalone"`, `load = <0xfff84000>`, sha256) ->
@@ -59,9 +61,9 @@ Userspace on the Linux side then sees RPMsg devices (e.g.
 `amp_monitor` LVGL app (`app/lvgl_demo/amp_monitor`) that displays the
 remote-core state.
 
-## Current status on this board (verified 2026-10-30)
+## Initial board status (verified 2026-10-30)
 
-The shipped SD image has **no M0 support enabled**:
+At that time the shipped SD image had **no boot-time AMP support**:
 
 - partition table `parameter-evb-sd.txt`: no `amp` partition
   (uboot/misc/boot/recovery/rootfs/oem/userdata only);
@@ -69,11 +71,13 @@ The shipped SD image has **no M0 support enabled**:
 - running kernel DT: no `rockchip-amp`, no RPMsg/mailbox nodes, no
   `mcu_reserved`.
 
-The M0 is held in reset. To run anything on it, a full AMP system image
-must be built (SDK `./build.sh`, MCU defconfig e.g.
-`rockchip_rk3506_g_evb1_mcu_defconfig` - which targets the Rockchip EVB1
-dts and would need adaptation to the Vanxoak board files) and the SD card
-reflashed. `app/coremark_cm0/` records the firmware-side work done so far.
+At that point the M0 was not running, and the image had no normal
+boot-time AMP support. This established that the vendor AMP boot path
+was unavailable; it did not rule out loading firmware later from Linux.
+The AMP image/partition changes below are still needed for vendor-style
+boot-time startup, but not for the runtime loader verified later in this
+document. `app/m0_bench/vendor_hal_experiment/` records the earlier
+vendor-HAL firmware-side work.
 
 
 ## Follow-up investigation (2026-11-03): SDK AMP machinery + build verified
@@ -81,11 +85,12 @@ reflashed. `app/coremark_cm0/` records the firmware-side work done so far.
 Verified live on the board and in the SDK copy; findings refine the
 sections above.
 
-### Current image state (re-confirmed unchanged)
+### Image state before the runtime-loader test (re-confirmed 2026-11-03)
 
 7 partitions (uboot/misc/boot/recovery/rootfs/oem/userdata), no `amp`;
 no remoteproc class; no `mcu` region in /proc/iomem; no AMP/RPMsg
-dmesg lines. The M0 is still held in reset.
+dmesg lines. The M0 was held in reset at that time; it was subsequently
+released by the runtime loader, as recorded below.
 
 ### SDK AMP build machinery (all present in ~/sdk)
 
@@ -100,14 +105,11 @@ dmesg lines. The M0 is still held in reset.
 | MCU HAL project | `hal/project/rk3506-mcu` (GCC/, src/, `gcc_bus_m0.ld`) | TestDemo demos selectable by #define: TEST_DEMO, GPIO_TEST, RPMSG_LINUX_TEST, SYSTICK/TIMER tests, PERF_TEST (benchmark) |
 | MCU toolchain | `prebuilts/gcc/linux-x86/arm/gcc-arm-none-eabi-10-2020-q4-major-x86_64-linux` | present |
 
-RT-Thread note: the MCU RT-Thread BSP (`rtos/bsp/rockchip/rk3506-mcu`)
-is **absent** from this SDK copy (only `rk3506-32` for the AP side) - so
-the **HAL bare-metal stack is the only MCU path available here**.
-
 ### MCU firmware build: VERIFIED
 
-With the CoreMark experiment reverted (the coremark middleware variant
-overflows the 32 KB M0 RAM - recorded in `app/coremark_cm0/`), the stock
+With the earlier vendor-HAL CoreMark experiment reverted (that middleware
+variant exceeds the 32 KB M0 RAM - recorded in
+`app/m0_bench/vendor_hal_experiment/`), the stock
 HAL TestDemo builds cleanly:
 
     export PATH=$SDK/prebuilts/gcc/linux-x86/arm/\
@@ -175,82 +177,193 @@ firmware examples. Verified against our setup:
   device from module init instead of DT (or a DT node with a boot.img
   rebuild later). Compiled as `.ko`, loaded with insmod - **no U-Boot or
   kernel image rebuild/reflash needed**.
-- Result data goes in the **DDR MCU shared memory at 0x03C00000**
-  (`RK3506_MCU_SHMEM_ADDR` in the driver; the vendor RPMsg shmem lives
-  there too) - it is BELOW the rk3506 DDR base (0x08000000), i.e. in a
-  bus hole the kernel never allocates, reachable by both the M0 bus and
-  A7 (/dev/mem; busybox devmem verified working; python mmap quirks
-  irrelevant for a C app).
+- An earlier proposal assumed `0x03C00000` was an unallocated shared-memory
+  bus hole. Live `/proc/iomem` and `/dev/mem` checks showed it is Linux System
+  RAM on this image, not reserved for the M0. Do not use the old
+  `app/m0_bench/reader/m0_read` DDR poller; the current result path uses
+  GPIO1_C0 instead.
 - Author-noted limitation: once the M0 is started, the code TCM SRAM is
   no longer A7-writable (no hot-swap) - irrelevant for a
   start-once-benchmark workload.
 - Kernel facts checked: `CONFIG_MODULES=y`,
   `CONFIG_HAVE_ARM_SMCCC=y` (module can issue the SMC), 3x A7 visible.
 
-### Feasible plan (no U-Boot/kernel rebuild or reflash)
+## Re-verified status (2026-11-04; corrects the earlier final verdict)
 
-1. Self-contained `.ko` (fork of rk3506_rproc, rproc-core stripped):
-   load flat bin -> SMC remap -> gate clocks -> release
-2. M0 firmware: minimal-startup CoreMark (or Dhrystone fallback)
-   writing `{magic, iterations, ticks, result}` to 0x03C00000
-3. A7 C reader: /dev/mem poll of the result block -> log via common/log.c
+**A simple bare-metal M0 image can be loaded and run from the current
+Linux image without rebuilding or reflashing the board.** This was
+verified on the live RK3506 board using the runtime module and GPIO
+liveness test in `app/m0_bench/`.
 
+The board still boots an image without AMP integration: the live device
+has no `amp` partition, AMP/RPMsg device-tree nodes, or RPMsg devices.
+That remains a limitation for automatic boot-time startup and Linux/M0
+RPMsg communication, but it does not prevent an administrator from
+loading a flat M0 image from Linux at runtime.
 
-## FINAL VERDICT (2026-11-04): M0 cannot be programmed from Linux on this board
+### Direct runtime test
 
-A userspace "load-and-go" attempt (a self-contained kernel module
-replicating the vendor U-Boot AMP release sequence + a bare-metal test
-firmware) was implemented and tested to exhaustion. Result: **the MCU
-SRAM at 0xFFF84000 is read-only for the Cortex-A7** - firmware writes
-are silently dropped by the hardware. Evidence:
+After a reboot restored the pre-SMC address map, the test did the
+following without writing any boot partition or changing the partition
+table:
 
-1. devmem write of 0x12345678 to 0xFFF84000 -> readback unchanged.
-2. The loader module's memcpy_toio -> immediate readback = 0x00000000.
-3. The ATF SIP_ACCESS_REG secure write returns an error (a0=4) - this
-   board's monitor does not implement (or does not permit) it.
-4. After the SMC TCM re-map, the A7 loses ALL access to the SRAM window
-   (everything reads 0x00000000, including the just-loaded image).
-5. The firewall controller registers (0xff5f0000) bus-error on any NS
-   access - the protection cannot be inspected or changed from Linux.
+1. Copied a 124-byte bare-metal GPIO test image to the SRAM window at
+   `0xFFF84000`; the loader compared the complete image readback before
+   proceeding.
+2. Issued `SIP_MCU_CFG` successfully, then applied the vendor U-Boot
+   clock-gate sequence and PMU release.
+3. Observed GPIO1_C0 (Linux GPIO line 48) transition `0 -> 1 -> 0`.
+   Linux reported the line as output, and it continued toggling after
+   the loader module returned. This verifies M0 instruction execution,
+   not merely successful register writes.
 
-An early "milestone 1" test that appeared to show the M0 writing a DONE
-flag into DDR was a false positive: the DDR probe address
-(0x03C00000/0x03C00004) sits inside live kernel RAM, and the value read
-(0x2) was kernel data, not M0 output. Unique-magic probes confirmed the
-M0's writes never land at any tested candidate address.
+The module log reported `SRAM image readback verified (124 bytes)`,
+`SMC ok`, and `M0 released`. The clock-gate register read back as
+`0x0000f300` and the PMU register as `0x00000004`. The SD card still had
+the original seven partitions (`uboot`, `misc`, `boot`, `recovery`,
+`rootfs`, `oem`, `userdata`) and no `amp` partition.
 
-What DOES work (all verified):
-- The firmware load into the SRAM via the A7 window: reads fine
-  (writes don't stick).
-- The ATF SMC (SIP_MCU_CFG): executes, and the TCM re-map takes effect
-  (the A7 loses the SRAM window afterwards - observed).
-- The CRU gate writes (hclk_m0, pclk_mailbox, stclk_m0) and the PMU
-  release write: all apply (readback-verified).
-- CON5 gate polarity: bit value 1 = ENABLED (hclk_m0 bit10 became set
-  after our enable write, per readback). bits 26,27 of CON5 are the
-  write-enable slots for gates 10,11 - they are NOT separate gates
-  (the vendor U-Boot's 0x0c000000 = "ungate gates 10,11").
+To repeat the test from the repository root, build the image and module,
+copy the three files to the board, then run the liveness script as root:
 
-### The working path = the vendor AMP image (U-Boot loads the M0)
+```sh
+make -C app/m0_bench/firmware
+make -C app/m0_bench/m0_loader
+scp app/m0_bench/firmware/m0.bin \
+  app/m0_bench/m0_loader/rk3506_m0_loader.ko \
+  app/m0_bench/board_run.py <board>:/root/m0bench/
+ssh <board> 'cd /root/m0bench && python3 ./board_run.py'
+```
 
-U-Boot runs before Linux with the SRAM writable; the AMP image flow is
-the only way to put code into the M0 on this board:
+The script exports GPIO line 48 for observation if needed. Run the loader
+once per boot: after its SMC remaps SRAM, a reboot is required before
+loading a different image.
 
-1. `device/rockchip/.chips/rk3506/rockchip_rk3506_g_evb_sd_defconfig`:
-   add `rk-amp` to RK_UBOOT_CFG_FRAGMENTS, set RK_AMP=y +
-   RK_AMP_FIT_ITS="amp_mcu.its", use a parameter file with an `amp`
-   partition (insert before userdata in parameter-evb-sd.txt).
-2. MCU firmware: `hal/project/rk3506-mcu` (HAL TestDemo; RT-Thread MCU
-   BSP absent from this SDK copy). rpmsg-lite demo available
-   (RPMSG_LINUX_TEST).
-3. `./build.sh` -> amp.img -> flash to the amp partition; uboot.img ->
-   the uboot partition.
-4. Optional kernel side (RPMsg): include rk3506-amp.dtsi in the board
-   DTS + the rockchip_amp.config fragment + CONFIG_RPMSG_TTY=y ->
-   /dev/ttyRPMSG0.
+The test firmware is only a GPIO liveness test; **this does not establish
+a CoreMark score or an RPMsg channel**. `board_coremark.py`'s old mailbox
+protocol was not implemented by the firmware and must not be used to
+claim a benchmark result.
 
-The loader module and firmware build in `app/m0_bench/` are kept as the
-complete reverse-engineered register recipe - useful the day an AMP
-image is flashed, at which point the loader's release sequence
-(SMC + gates + PMU) matches what U-Boot already did and only the RPMsg
-side matters.
+### What the earlier write-protection observations mean
+
+The previous conclusion that the SRAM was universally read-only from
+Linux was incorrect. The live kernel log contains a loader readback of
+the expected image words before the first SMC. Later attempts, in the
+same boot after `SIP_MCU_CFG` had remapped SRAM as M0 code TCM, read back
+zeros. The SMC changes the A7-visible mapping; those later reads do not
+prove that pre-SMC writes were blocked. Likewise, an error from the
+separate secure-register-access SMC does not prove that ordinary
+`memcpy_toio()` writes to SRAM fail.
+
+The old loader also called `clk_get()` for clocks with no consumer
+device/DT links. The live log showed `-ENOENT`, but it ignored those
+failures and still printed a success-shaped “firmware running” message.
+The corrected loader verifies SRAM contents before the SMC, uses the
+vendor U-Boot clock-gate write, and the GPIO test confirms execution.
+
+An earlier DDR result probe at `0x03c00000` was invalid: in the running
+non-AMP image that address is inside Linux System RAM, not reserved
+shared memory. That does not affect the GPIO liveness result above.
+
+### Practical limits
+
+- The loader must run before the SMC TCM remap. Once the SMC has been
+  issued in a boot, the A7 cannot use this same loading sequence to
+  replace the M0 image; reboot first to restore the initial mapping.
+- The test requires root privileges, a module built for the running
+  kernel, and an available GPIO1_C0 test pin. It does not require an
+  AMP partition or a kernel/U-Boot image rebuild.
+- For automatic startup after every boot, RPMsg integration, or a
+  production firmware update path, use the vendor AMP image flow
+  described above. Those features are not enabled in the current image.
+
+### Standalone CoreMark runtime test (2026-11-04)
+
+A stripped bare-metal CoreMark build now fits in the M0's 32 KB SRAM and can
+use the same Linux runtime loader; the earlier vendor-HAL integration attempt
+in `app/m0_bench/vendor_hal_experiment/` did not fit. The standalone CoreMark
+ELF has 5,298 bytes of text, 72 bytes of data, and 44 bytes of BSS; its flat
+image is 5,372 bytes, leaving ample room in the 32 KB M0 SRAM for the benchmark
+stack and working set.
+
+The firmware uses GPIO1_C0 (Linux GPIO line 48) for both the benchmark
+start/end markers and a low-speed serial report. `board_coremark.py` measures
+the timed section with the A7's monotonic clock, decodes the iteration count
+and CRCs from the GPIO stream, checks the known performance-run CRCs, and
+rejects results shorter than 10 seconds. This avoids the unreserved
+`0x03c00000` DDR address and does not require RPMsg or a routed M0 UART.
+It uses CoreMark's 2K performance-run working set. The reported throughput
+is iterations/second; no CoreMark/MHz figure is reported because the M0 clock
+has not been measured independently. The A7 polls the legacy sysfs GPIO
+interface at 2 ms intervals to time GPIO1_C0's benchmark markers; the result
+packet is transmitted on the same GPIO at about 42.7 ms per bit.
+
+### Live CoreMark result (2026-11-04)
+
+Ran the standalone image on the Vanxoak RK3506G board after rebooting to
+restore the pre-SMC SRAM mapping. No U-Boot, kernel, partition, or board-image
+changes were made. The board was reachable at `192.168.5.57` for this run;
+that is its DHCP address, not a configured static address.
+
+| Measurement | Result |
+|---|---:|
+| Board / kernel | Vanxoak RK3506G / Linux `6.1.118` (`#4`) |
+| CoreMark performance configuration | 2K, 10,000 iterations |
+| A7-measured timed interval | 32.393 s |
+| Throughput | 308.71 iterations/s |
+| Seed/list/matrix/state CRCs | `e9f5` / `e714` / `1fd7` / `8e3a` |
+| Final CRC | `988c` |
+| Firmware flat image | 5,372 bytes |
+| GPIO report bit period | 42.7 ms |
+
+The runner reported `PASS`, including the expected CRC checks and the
+10-second minimum. The loader log confirmed readback of all 5,372 image bytes,
+successful `SIP_MCU_CFG`, and M0 release. This is a validated 2K performance
+run; it does not provide a CoreMark/MHz figure because the M0 clock is still
+unknown. The measured result is from the GPIO serial report and A7 monotonic
+clock, not from the unreserved DDR address or a simulated run. The report
+packet used version 1 and passed its CRC-8 as well as CoreMark's known
+seed/list/matrix/state CRC checks.
+
+The successful invocation was:
+
+```sh
+ssh root@192.168.5.57 \
+  'cd /root/m0bench/coremark && python3 ./board_coremark.py \
+    --firmware /root/m0bench/coremark/m0-coremark.bin \
+    --timeout 420 --report-timeout 180'
+```
+
+The image had first been staged under `/root/m0bench/coremark/`, while the
+runner's default firmware path is `/root/m0bench/m0-coremark.bin`. The first
+attempt using that default failed to open the image and did not issue the
+SMC; the corrected invocation above passed. The same verified image, loader,
+and runner were then copied into `/root/m0bench/` so the documented default
+command works after the next reboot. The board was not rebooted after the
+successful run; the M0 completed the report and entered its idle loop.
+
+Firmware SHA-256:
+`a90133805e8e8e3d67fc25e92e75b4b43f68a9a8c0e0b053996786ffe3e42202`.
+The loader module SHA-256 was
+`07f78b147dd89b115a8bb9862fe84ba68ee7cc5f4bbe67d90f3595f77dc785da`.
+The runner SHA-256 was
+`e14a88dd6c058df9986e715700acaf47add705f8c15f17f163c08840431c2a74`.
+
+Build and run:
+
+```sh
+make -C app/m0_bench/firmware
+ssh <board> 'mkdir -p /root/m0bench'
+scp app/m0_bench/firmware/m0-coremark.bin \
+  app/m0_bench/m0_loader/rk3506_m0_loader.ko \
+  app/m0_bench/board_coremark.py <board>:/root/m0bench/
+ssh <board> 'cd /root/m0bench && python3 ./board_coremark.py'
+```
+
+This needs no board image rebuild or reflash. The loader can issue the
+SRAM-remapping SMC only once per boot; reboot before each new firmware load,
+including repeat CoreMark runs. On a fresh boot, the command loads the
+firmware and prints the elapsed time, throughput, and validation CRCs. The
+CoreMark GPIO report takes several additional seconds after the timed run.
+If the run is shorter than 10 seconds, increase the workload and rebuild:
+`make -C app/m0_bench/firmware clean && make -C app/m0_bench/firmware COREMARK_ITERATIONS=20000`.

@@ -21,6 +21,8 @@ Original Author: Shay Gal-on
    initial parameters, tun t he benchmark and report the results.
 */
 #include "coremark.h"
+#include "core_portme.h"
+#include "coremark_report.h"
 
 /* Function: iterate
         Run the benchmark for a specified number of iterations.
@@ -370,12 +372,14 @@ for (i = 0; i < MULTITHREAD; i++)
                   default_num_contexts * results[0].iterations
                       / time_in_secs(total_time));
 #endif
+#if !defined(COREMARK_EXTERNAL_TIMING)
     if (time_in_secs(total_time) < 10)
     {
         ee_printf(
             "ERROR! Must execute for at least 10 secs for a valid result!\n");
         total_errors++;
     }
+#endif
 
     ee_printf("Iterations       : %lu\n",
               (long unsigned)default_num_contexts * results[0].iterations);
@@ -435,6 +439,16 @@ for (i = 0; i < MULTITHREAD; i++)
     for (i = 0; i < MULTITHREAD; i++)
         portable_free(results[i].memblock[0]);
 #endif
+    m0_coremark_report.magic = M0_COREMARK_REPORT_MAGIC;
+    m0_coremark_report.iterations
+        = default_num_contexts * results[0].iterations;
+    m0_coremark_report.seed_crc = seedcrc;
+    m0_coremark_report.list_crc = results[0].crclist;
+    m0_coremark_report.matrix_crc = results[0].crcmatrix;
+    m0_coremark_report.state_crc = results[0].crcstate;
+    m0_coremark_report.final_crc = results[0].crc;
+    m0_coremark_report.valid = (total_errors == 0 && known_id >= 0);
+
     /* And last call any target specific code for finalizing */
     portable_fini(&(results[0].port));
 

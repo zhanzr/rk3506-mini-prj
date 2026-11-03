@@ -917,11 +917,6 @@ deps_/home/user1/rk3506-dev/app/m0_bench/m0_loader/rk3506_m0_loader.o := \
     $(wildcard include/config/ARM64_SVE) \
   arch/arm/include/asm/opcodes-sec.h \
   arch/arm/include/asm/opcodes-virt.h \
-  include/linux/clk.h \
-    $(wildcard include/config/COMMON_CLK) \
-    $(wildcard include/config/HAVE_CLK_PREPARE) \
-    $(wildcard include/config/HAVE_CLK) \
-    $(wildcard include/config/OF) \
 
 /home/user1/rk3506-dev/app/m0_bench/m0_loader/rk3506_m0_loader.o: $(deps_/home/user1/rk3506-dev/app/m0_bench/m0_loader/rk3506_m0_loader.o)
 

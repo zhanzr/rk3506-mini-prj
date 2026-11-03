@@ -12,8 +12,22 @@ SECTIONS
 
     .vectors : { KEEP(*(.vectors)) } > RAM
     .text    : { *(.text*) *(.rodata*) } > RAM
-    .data    : { *(.data*) } > RAM
-    .bss     : { *(.bss*) *(COMMON) } > RAM
+    .data    :
+    {
+        _sdata = .;
+        *(.data*)
+        _edata = .;
+    } > RAM
+    _sidata = LOADADDR(.data);
+    .bss (NOLOAD) :
+    {
+        _sbss = .;
+        *(.bss*) *(COMMON)
+        _ebss = .;
+    } > RAM
 
     /DISCARD/ : { *(.comment) *(.ARM.attributes) }
+
+    ASSERT(. <= ORIGIN(RAM) + LENGTH(RAM) - 8192,
+           "M0 image leaves less than 8 KB for stack")
 }

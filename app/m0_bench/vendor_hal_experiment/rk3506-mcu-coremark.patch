@@ -8,11 +8,11 @@ index 81d5820..aaaacc9 100644
  -include ../../../middleware/benchmark/benchmark.mk
 --include ../../../middleware/rpmsg-lite/rpmsg-lite.mk
 --include ../../../middleware/simple_console/simple_console.mk
-+# -include ../../../middleware/rpmsg-lite/rpmsg-lite.mk  # coremark_cm0: dropped (RAM)
-+# -include ../../../middleware/simple_console/simple_console.mk  # coremark_cm0: dropped (RAM)
++# -include ../../../middleware/rpmsg-lite/rpmsg-lite.mk  # vendor HAL experiment: dropped (RAM)
++# -include ../../../middleware/simple_console/simple_console.mk  # vendor HAL experiment: dropped (RAM)
  include ../../common/GCC/Cortex-M.mk
 +
-+# coremark_cm0: last-wins -Os to fit 32KB M0 RAM
++# vendor HAL experiment: last-wins -Os to fit 32KB M0 RAM
 +CFLAGS += -Os
 +LDFLAGS += --specs=nano.specs
 +CFLAGS += -flto -ffat-lto-objects
@@ -78,7 +78,7 @@ index 12d5c96..f450001 100644
  typedef unsigned short ee_u16;
  typedef signed int     ee_s32;
 -typedef double         ee_f32;
-+typedef float ee_f32; /* coremark_cm0: single precision, M0 has no FPU */
++typedef float ee_f32; /* single precision, M0 has no FPU */
  typedef unsigned char  ee_u8;
  typedef unsigned int   ee_u32;
  typedef ee_u32         ee_ptr_int;

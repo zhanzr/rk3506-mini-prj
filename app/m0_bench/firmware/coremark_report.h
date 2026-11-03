@@ -1,0 +1,6 @@
+#ifndef M0_COREMARK_REPORT_H
+#define M0_COREMARK_REPORT_H
+
+#define M0_COREMARK_REPORT_MAGIC 0x4d30434du
+
+#endif

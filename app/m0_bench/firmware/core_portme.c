@@ -1,11 +1,9 @@
-/* RK3506 M0 port implementation - no HAL, timing by A7 wall clock */
+/* RK3506 M0 port; the A7 measures the benchmark interval over GPIO1_C0. */
 #include "coremark.h"
 #include <stdint.h>
 
-/* DDR shared memory output buffer (past the header words, cap 896 B) */
-volatile char *shm_out_ptr = (volatile char *)(0x03C00000u + 64u);
-int            shm_out_cnt = 0;
-ee_u32         default_num_contexts = 1;
+volatile struct m0_coremark_report m0_coremark_report;
+ee_u32 default_num_contexts = 1;
 
 #if VALIDATION_RUN
 volatile ee_s32 seed1_volatile = 0x3415;
@@ -29,7 +27,7 @@ void *
 portable_malloc(ee_size_t size)
 {
     (void)size;
-    return (void *)0;   /* MEM_STACK - never called */
+    return (void *)0;
 }
 
 void
@@ -41,7 +39,7 @@ portable_free(void *p)
 CORETIMETYPE
 barebones_clock(void)
 {
-    return 0;           /* no on-M0 timer; the A7 measures wall time */
+    return 0;
 }
 
 #define GETMYTIME(_t)              (*_t = barebones_clock())
@@ -52,12 +50,14 @@ void
 start_time(void)
 {
     GETMYTIME(&start_time_val);
+    coremark_gpio_write(1);
 }
 
 void
 stop_time(void)
 {
     GETMYTIME(&stop_time_val);
+    coremark_gpio_write(0);
 }
 
 CORE_TICKS
@@ -66,13 +66,11 @@ get_time(void)
     return MYTIMEDIFF(stop_time_val, start_time_val);
 }
 
-double
+secs_ret
 time_in_secs(CORE_TICKS ticks)
 {
-    /* no on-M0 timer: pretend >=10 s so the report has no ERROR line;
-     * the authoritative score comes from the A7 wall clock */
     (void)ticks;
-    return 10.0;
+    return 0;
 }
 
 void
@@ -87,4 +85,11 @@ void
 portable_fini(core_portable *p)
 {
     (void)p;
+}
+
+int
+ee_printf(const char *fmt, ...)
+{
+    (void)fmt;
+    return 0;
 }

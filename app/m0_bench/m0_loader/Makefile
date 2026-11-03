@@ -6,9 +6,9 @@ KDIR ?= $(HOME)/sdk/kernel-6.1
 all: rk3506_m0_loader.ko
 
 rk3506_m0_loader.ko: rk3506_m0_loader.c
-	$(MAKE) ARCH=arm CROSS_COMPILE=$(TC)/bin/arm-none-linux-gnueabihf- -C $(KDIR) M=$(PWD) modules
+	$(MAKE) ARCH=arm CROSS_COMPILE=$(TC)/bin/arm-none-linux-gnueabihf- -C $(KDIR) M=$(CURDIR) modules
 
 clean:
-	$(MAKE) -C $(KDIR) M=$(PWD) clean
+	$(MAKE) -C $(KDIR) M=$(CURDIR) clean
 
 .PHONY: all clean

@@ -27,7 +27,6 @@
 #include <linux/file.h>
 #include <linux/err.h>
 #include <linux/arm-smccc.h>
-#include <linux/clk.h>
 
 #define M0_SRAM_BUS   0xFFF84000u
 #define M0_SRAM_SIZE  0x8000u
@@ -35,12 +34,6 @@
 #define SIP_MCU_CFG   0x82000028u
 #define SIP_BUSMCU_0  0x00u
 #define SIP_CODE_START 0x01u
-
-/* ATF/TEE diagnostics: version + secure register access */
-#define SIP_ATF_VERSION     0x82000001u
-#define SIP_ACCESS_REG      0x82000002u
-#define SECURE_REG_RD       0x0u
-#define SECURE_REG_WR       0x1u
 
 #define CRU_BASE      0xFF9A0000u
 #define CRU_GATE_CON5 (CRU_BASE + 0x814)
@@ -57,7 +50,7 @@ static int __init m0_loader_init(void)
     void __iomem *sram, *cru, *grf, *pmu;
     struct file *f;
     loff_t pos = 0;
-    void *buf;
+    void *buf, *verify_buf;
     int ret;
 
     sram = ioremap(M0_SRAM_BUS, M0_SRAM_SIZE);
@@ -98,19 +91,29 @@ static int __init m0_loader_init(void)
     pr_info("m0_loader: firmware %s: %d bytes\n", fw_path, ret);
 
     /* 0. assert the M0 reset (also re-releases cleanly at step 5) */
-    {
-        void __iomem *pmu0 = ioremap(PMU_INT_MASK_CON & ~0xFFFu, 0x1000);
-
-        writel(0x00060002u, pmu0 + (PMU_INT_MASK_CON & 0xFFF));
-        iounmap(pmu0);
-    }
+    writel(0x00060002u, pmu + (PMU_INT_MASK_CON & 0xFFF));
 
     /* 1. copy into the M0 SRAM (A7-side window) + readback verify */
     memcpy_toio(sram, buf, ret);
+    verify_buf = kmalloc(ret, GFP_KERNEL);
+    if (!verify_buf)
+    {
+        kfree(buf);
+        ret = -ENOMEM;
+        goto err_map;
+    }
+    memcpy_fromio(verify_buf, sram, ret);
+    if (memcmp(buf, verify_buf, ret))
+    {
+        pr_err("m0_loader: SRAM image readback mismatch; refusing to release M0\n");
+        kfree(verify_buf);
+        kfree(buf);
+        ret = -EIO;
+        goto err_map;
+    }
+    pr_info("m0_loader: SRAM image readback verified (%d bytes)\n", ret);
+    kfree(verify_buf);
     kfree(buf);
-    pr_info("m0_loader: SRAM readback: %08x %08x %08x %08x\n",
-            readl(sram), readl(sram + 4), readl(sram + 8),
-            readl(sram + 12));
 
     /* 2. ATF: re-map SRAM as M0 code TCM + set entry point */
     arm_smccc_smc(SIP_MCU_CFG, SIP_BUSMCU_0, SIP_CODE_START,
@@ -122,39 +125,14 @@ static int __init m0_loader_init(void)
         goto err_map;
     }
     pr_info("m0_loader: SMC ok - SRAM re-mapped as M0 code TCM\n");
-    pr_info("m0_loader: SMC ok - SRAM re-mapped as M0 code TCM\n");
+
+    /* Match the vendor U-Boot sequence: ungate the M0 bus and SW clock. */
+    writel(0x0c000000u, cru + (CRU_GATE_CON5 - CRU_BASE));
+    if (readl(cru + (CRU_GATE_CON5 - CRU_BASE)) & 0x00000c00u)
     {
-        struct arm_smccc_res rres;
-
-        arm_smccc_smc(SIP_ACCESS_REG, 0, 0xFF9A0814u, SECURE_REG_RD,
-                      0, 0, 0, 0, &rres);
-        pr_info("m0_loader: secure CON5 post-SMC = %08lx\n", rres.a1);
-    }
-
-    /* 3. M0 clocks through the CCF, by name - no DT needed.
-     * Raw CRU gate pokes fight the kernel clock framework (the gate
-     * bit polarity is ambiguous from userspace); the CCF does it
-     * right. pclk_mailbox is ungated so the M0 firmware can write
-     * the result register. */
-    {
-        static const char *clk_names[] = {
-            "hclk_m0", "stclk_m0", "pclk_mailbox"
-        };
-        int ci;
-
-        for (ci = 0; ci < 3; ci++)
-        {
-            struct clk *c = clk_get(NULL, clk_names[ci]);
-
-            if (IS_ERR(c))
-            {
-                pr_err("m0_loader: clk_get(%s): %ld\n", clk_names[ci],
-                       (long)PTR_ERR(c));
-                continue;
-            }
-            clk_prepare_enable(c);
-            pr_info("m0_loader: %s enabled\n", clk_names[ci]);
-        }
+        pr_err("m0_loader: M0 clock gates did not open\n");
+        ret = -EIO;
+        goto err_map;
     }
 
     /* 4. m0 system time calibration */
