@@ -149,3 +149,48 @@ HAL TestDemo builds cleanly:
 3. Repartition SD (amp before userdata), write amp.img to it
 4. Reboot - U-Boot loads/releases the M0; Linux shows
    `/dev/ttyRPMSG0`; `echo hi > /dev/ttyRPMSG0` round-trips to the M0
+
+
+## Community project found: nvitya/rk3506-mcu (2026-11-03)
+
+https://github.com/nvitya/rk3506-mcu - a third-party RK3506 CM0 project
+with (a) a **remoteproc kernel driver** (`rk3506_rproc.c`) that
+loads/starts/stops the M0 on a running Linux and (b) VIHAL-based MCU
+firmware examples. Verified against our setup:
+
+- The M0 start sequence it uses matches the vendor flow exactly and is
+  the authoritative recipe: load firmware into the SRAM window
+  (0xFFF84000), then `arm_smccc_smc(SIP_MCU_CFG, BUSMCU_0,
+  CODE_START_ADDR, entry)` - this ATF call re-maps the SRAM as M0 code
+  TCM and sets the entry point (without it the M0 cannot fetch code);
+  then `CRU_GATE_CON5 (0xff9a0814) <- 0x0c000000` (hclk/swclktck) and
+  `PMU_INT_MASK_CON (0xff90000c) <- 0x00060004` (release). Our board's
+  ATF supports the call - the vendor U-Boot `fit_standalone_release()`
+  (rk3506.c) issues the identical SMC.
+- The driver as published needs `CONFIG_REMOTEPROC` (rproc-core ELF
+  helpers) which our stock kernel lacks (`# CONFIG_REMOTEPROC is not
+  set`). Adaptation for our constraints: make the module self-contained
+  - accept a flat `.bin` (userspace runs objcopy), ioremap-copy it into
+  the SRAM window, issue the SMC + release itself; instantiate the
+  device from module init instead of DT (or a DT node with a boot.img
+  rebuild later). Compiled as `.ko`, loaded with insmod - **no U-Boot or
+  kernel image rebuild/reflash needed**.
+- Result data goes in the **DDR MCU shared memory at 0x03C00000**
+  (`RK3506_MCU_SHMEM_ADDR` in the driver; the vendor RPMsg shmem lives
+  there too) - it is BELOW the rk3506 DDR base (0x08000000), i.e. in a
+  bus hole the kernel never allocates, reachable by both the M0 bus and
+  A7 (/dev/mem; busybox devmem verified working; python mmap quirks
+  irrelevant for a C app).
+- Author-noted limitation: once the M0 is started, the code TCM SRAM is
+  no longer A7-writable (no hot-swap) - irrelevant for a
+  start-once-benchmark workload.
+- Kernel facts checked: `CONFIG_MODULES=y`,
+  `CONFIG_HAVE_ARM_SMCCC=y` (module can issue the SMC), 3x A7 visible.
+
+### Feasible plan (no U-Boot/kernel rebuild or reflash)
+
+1. Self-contained `.ko` (fork of rk3506_rproc, rproc-core stripped):
+   load flat bin -> SMC remap -> gate clocks -> release
+2. M0 firmware: minimal-startup CoreMark (or Dhrystone fallback)
+   writing `{magic, iterations, ticks, result}` to 0x03C00000
+3. A7 C reader: /dev/mem poll of the result block -> log via common/log.c
