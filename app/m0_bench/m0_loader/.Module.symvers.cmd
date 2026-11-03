@@ -1,0 +1,1 @@
+cmd_/home/user1/rk3506-dev/app/m0_bench/m0_loader/Module.symvers :=  sed 's/ko$$/o/'  /home/user1/rk3506-dev/app/m0_bench/m0_loader/modules.order | scripts/mod/modpost       -o /home/user1/rk3506-dev/app/m0_bench/m0_loader/Module.symvers -n -e -i Module.symvers -T - 

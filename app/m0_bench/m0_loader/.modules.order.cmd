@@ -1,0 +1,1 @@
+cmd_/home/user1/rk3506-dev/app/m0_bench/m0_loader/modules.order := {   echo /home/user1/rk3506-dev/app/m0_bench/m0_loader/rk3506_m0_loader.ko; :; } > /home/user1/rk3506-dev/app/m0_bench/m0_loader/modules.order

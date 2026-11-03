@@ -194,3 +194,63 @@ firmware examples. Verified against our setup:
 2. M0 firmware: minimal-startup CoreMark (or Dhrystone fallback)
    writing `{magic, iterations, ticks, result}` to 0x03C00000
 3. A7 C reader: /dev/mem poll of the result block -> log via common/log.c
+
+
+## FINAL VERDICT (2026-11-04): M0 cannot be programmed from Linux on this board
+
+A userspace "load-and-go" attempt (a self-contained kernel module
+replicating the vendor U-Boot AMP release sequence + a bare-metal test
+firmware) was implemented and tested to exhaustion. Result: **the MCU
+SRAM at 0xFFF84000 is read-only for the Cortex-A7** - firmware writes
+are silently dropped by the hardware. Evidence:
+
+1. devmem write of 0x12345678 to 0xFFF84000 -> readback unchanged.
+2. The loader module's memcpy_toio -> immediate readback = 0x00000000.
+3. The ATF SIP_ACCESS_REG secure write returns an error (a0=4) - this
+   board's monitor does not implement (or does not permit) it.
+4. After the SMC TCM re-map, the A7 loses ALL access to the SRAM window
+   (everything reads 0x00000000, including the just-loaded image).
+5. The firewall controller registers (0xff5f0000) bus-error on any NS
+   access - the protection cannot be inspected or changed from Linux.
+
+An early "milestone 1" test that appeared to show the M0 writing a DONE
+flag into DDR was a false positive: the DDR probe address
+(0x03C00000/0x03C00004) sits inside live kernel RAM, and the value read
+(0x2) was kernel data, not M0 output. Unique-magic probes confirmed the
+M0's writes never land at any tested candidate address.
+
+What DOES work (all verified):
+- The firmware load into the SRAM via the A7 window: reads fine
+  (writes don't stick).
+- The ATF SMC (SIP_MCU_CFG): executes, and the TCM re-map takes effect
+  (the A7 loses the SRAM window afterwards - observed).
+- The CRU gate writes (hclk_m0, pclk_mailbox, stclk_m0) and the PMU
+  release write: all apply (readback-verified).
+- CON5 gate polarity: bit value 1 = ENABLED (hclk_m0 bit10 became set
+  after our enable write, per readback). bits 26,27 of CON5 are the
+  write-enable slots for gates 10,11 - they are NOT separate gates
+  (the vendor U-Boot's 0x0c000000 = "ungate gates 10,11").
+
+### The working path = the vendor AMP image (U-Boot loads the M0)
+
+U-Boot runs before Linux with the SRAM writable; the AMP image flow is
+the only way to put code into the M0 on this board:
+
+1. `device/rockchip/.chips/rk3506/rockchip_rk3506_g_evb_sd_defconfig`:
+   add `rk-amp` to RK_UBOOT_CFG_FRAGMENTS, set RK_AMP=y +
+   RK_AMP_FIT_ITS="amp_mcu.its", use a parameter file with an `amp`
+   partition (insert before userdata in parameter-evb-sd.txt).
+2. MCU firmware: `hal/project/rk3506-mcu` (HAL TestDemo; RT-Thread MCU
+   BSP absent from this SDK copy). rpmsg-lite demo available
+   (RPMSG_LINUX_TEST).
+3. `./build.sh` -> amp.img -> flash to the amp partition; uboot.img ->
+   the uboot partition.
+4. Optional kernel side (RPMsg): include rk3506-amp.dtsi in the board
+   DTS + the rockchip_amp.config fragment + CONFIG_RPMSG_TTY=y ->
+   /dev/ttyRPMSG0.
+
+The loader module and firmware build in `app/m0_bench/` are kept as the
+complete reverse-engineered register recipe - useful the day an AMP
+image is flashed, at which point the loader's release sequence
+(SMC + gates + PMU) matches what U-Boot already did and only the RPMsg
+side matters.
