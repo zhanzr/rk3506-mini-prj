@@ -36,6 +36,8 @@ extern "C" {
 #include "lcd_fonts.h"
 #include "lcd_font_1608.h"
 
+#include "log.h"
+
 /* ---- backlight PWM (JP4.15, pwm1_8ch_0 @ ff170000, rk3506-mini) ----
  * 200 kHz normal polarity, fixed 55% (bright enough to judge detection
  * results). The opz board had BLK hardwired to 3.3 V - no PWM there. */
@@ -202,7 +204,7 @@ static void panel_init(void)
     LCD_SetAsciiFont(&ASCII_Font16);
     LCD_SetPix18(pix18);
     panel_ok = 1;
-    printf("panel: MD350 enabled (%s)\n",
+    log_printf(LOG_LVL_INFO, "panel: MD350 enabled (%s)",
            pix18 ? "18-bit RGB666" : "16-bit RGB565");
     fflush(stdout);
 }
@@ -295,13 +297,13 @@ static void *cap_thread(void *arg)
 
         if (usb)
             cap_dev = usb;
-        printf("alsa: capture device %s\n", cap_dev);
+        log_printf(LOG_LVL_INFO, "alsa: capture device %s", cap_dev);
     }
     int err = snd_pcm_open(&pcm, cap_dev, SND_PCM_STREAM_CAPTURE,
                            SND_PCM_NONBLOCK);
     if (err < 0)
     {
-        fprintf(stderr, "alsa open failed: %s\n", snd_strerror(err));
+        log_printf(LOG_LVL_ERROR, "alsa open failed: %s", snd_strerror(err));
         set_capture_state(CAP_FAILED);
         return NULL;
     }
@@ -310,7 +312,7 @@ static void *cap_thread(void *arg)
     err = snd_pcm_hw_params_malloc(&hw);
     if (err < 0)
     {
-        fprintf(stderr, "alsa hw params allocation failed: %s\n",
+        log_printf(LOG_LVL_ERROR, "alsa hw params allocation failed: %s",
                 snd_strerror(err));
         snd_pcm_close(pcm);
         set_capture_state(CAP_FAILED);
@@ -336,7 +338,7 @@ static void *cap_thread(void *arg)
         err = snd_pcm_hw_params(pcm, hw);
     if (err < 0)
     {
-        fprintf(stderr, "alsa hw params failed: %s\n", snd_strerror(err));
+        log_printf(LOG_LVL_ERROR, "alsa hw params failed: %s", snd_strerror(err));
         snd_pcm_hw_params_free(hw);
         snd_pcm_close(pcm);
         set_capture_state(CAP_FAILED);
@@ -346,7 +348,7 @@ static void *cap_thread(void *arg)
     snd_pcm_hw_params_free(hw);
     if (err < 0 || real_rate != kAudioSampleFrequency)
     {
-        fprintf(stderr, "alsa requires %d Hz; device negotiated %u Hz\n",
+        log_printf(LOG_LVL_ERROR, "alsa requires %d Hz; device negotiated %u Hz",
                 kAudioSampleFrequency, real_rate);
         snd_pcm_close(pcm);
         set_capture_state(CAP_FAILED);
@@ -355,12 +357,12 @@ static void *cap_thread(void *arg)
     err = snd_pcm_prepare(pcm);
     if (err < 0)
     {
-        fprintf(stderr, "alsa prepare failed: %s\n", snd_strerror(err));
+        log_printf(LOG_LVL_ERROR, "alsa prepare failed: %s", snd_strerror(err));
         snd_pcm_close(pcm);
         set_capture_state(CAP_FAILED);
         return NULL;
     }
-    printf("alsa: capturing %u Hz mono (wanted %d)\n",
+    log_printf(LOG_LVL_INFO, "alsa: capturing %u Hz mono (wanted %d)",
            real_rate, kAudioSampleFrequency);
     set_capture_state(CAP_READY);
 
@@ -373,7 +375,7 @@ static void *cap_thread(void *arg)
             err = snd_pcm_wait(pcm, 100);
             if (err < 0 && snd_pcm_recover(pcm, err, 1) < 0)
             {
-                fprintf(stderr, "alsa wait recovery failed: %s\n",
+                log_printf(LOG_LVL_ERROR, "alsa wait recovery failed: %s",
                         snd_strerror(err));
                 set_capture_state(CAP_FAILED);
                 break;
@@ -385,7 +387,7 @@ static void *cap_thread(void *arg)
             err = snd_pcm_recover(pcm, (int)n, 1);
             if (err < 0)
             {
-                fprintf(stderr, "alsa read recovery failed: %s\n",
+                log_printf(LOG_LVL_ERROR, "alsa read recovery failed: %s",
                         snd_strerror(err));
                 set_capture_state(CAP_FAILED);
                 break;
@@ -447,17 +449,17 @@ static bool tflm_init(void)
     if (!load_file("audio_preprocessor_int8.tflite", pre_model_buf,
                    sizeof(pre_model_buf), &pre_len))
     {
-        fprintf(stderr, "pre model load failed\n");
+        log_printf(LOG_LVL_ERROR, "pre model load failed");
         return false;
     }
-    printf("tflm: pre model %u bytes\n", (unsigned)pre_len);
+    log_printf(LOG_LVL_INFO, "tflm: pre model %u bytes", (unsigned)pre_len);
     if (!load_file("micro_speech_quantized.tflite", speech_model_buf,
                    sizeof(speech_model_buf), &speech_len))
     {
-        fprintf(stderr, "speech model load failed\n");
+        log_printf(LOG_LVL_ERROR, "speech model load failed");
         return false;
     }
-    printf("tflm: speech model %u bytes\n", (unsigned)speech_len);
+    log_printf(LOG_LVL_INFO, "tflm: speech model %u bytes", (unsigned)speech_len);
 
     /* speech ops + the signal custom ops the audio preprocessor uses
        (identical to tflm micro_speech_test RegisterOps) */
@@ -489,10 +491,10 @@ static bool tflm_init(void)
         sizeof(pre_arena));
     if (pi.AllocateTensors() != kTfLiteOk)
     {
-        fprintf(stderr, "pre AllocateTensors failed\n");
+        log_printf(LOG_LVL_ERROR, "pre AllocateTensors failed");
         return false;
     }
-    printf("tflm: preprocessor arena %u bytes\n",
+    log_printf(LOG_LVL_INFO, "tflm: preprocessor arena %u bytes",
            (unsigned)pi.arena_used_bytes());
     pre_interp = &pi;
 
@@ -501,10 +503,10 @@ static bool tflm_init(void)
         sizeof(speech_arena));
     if (si.AllocateTensors() != kTfLiteOk)
     {
-        fprintf(stderr, "speech AllocateTensors failed\n");
+        log_printf(LOG_LVL_ERROR, "speech AllocateTensors failed");
         return false;
     }
-    printf("tflm: speech arena %u bytes\n",
+    log_printf(LOG_LVL_INFO, "tflm: speech arena %u bytes",
            (unsigned)si.arena_used_bytes());
     speech_interp = &si;
     return true;
@@ -566,6 +568,8 @@ static void draw_verdict(const char *label, int yes_pct, int no_pct)
 
 int main(int argc, char **argv)
 {
+    log_init("wake_word");
+    log_config_from_argv(argc, argv);
     (void)argc; (void)argv;
     setvbuf(stdout, NULL, _IONBF, 0);
     signal(SIGINT, on_signal);
@@ -582,7 +586,7 @@ int main(int argc, char **argv)
             pix18 = 0;
         else
         {
-            fprintf(stderr, "usage: wake_word [-6 RGB666] [-d alsa_dev]\n");
+            log_printf(LOG_LVL_ERROR, "usage: wake_word [-6 RGB666] [-d alsa_dev]");
             return 1;
         }
     }
@@ -590,7 +594,7 @@ int main(int argc, char **argv)
     panel_init();
     if (!panel_ok)
     {
-        fprintf(stderr, "panel init failed\n");
+        log_printf(LOG_LVL_ERROR, "panel init failed");
         return 1;
     }
     fb_string_t("wake_word: loading", 16, 120, LCD_WHITE);
@@ -598,7 +602,7 @@ int main(int argc, char **argv)
 
     if (!tflm_init())
     {
-        fprintf(stderr, "tflm init failed (model files?)\n");
+        log_printf(LOG_LVL_ERROR, "tflm init failed (model files?)");
         return 1;
     }
 
@@ -608,16 +612,16 @@ int main(int argc, char **argv)
         system("amixer -c 0 sset 'Mic1',0 100%,100% cap > /dev/null 2>&1; "
                "amixer -c 0 sset 'Mic2',0 100%,100% cap > /dev/null 2>&1");
     if (route_status == 0)
-        printf("alsa: Mic1/Mic2 capture routes enabled\n");
+        log_printf(LOG_LVL_INFO, "alsa: Mic1/Mic2 capture routes enabled");
     else
-        fprintf(stderr, "alsa: could not enable codec capture routes (status %d)\n",
+        log_printf(LOG_LVL_ERROR, "alsa: could not enable codec capture routes (status %d)",
                 route_status);
 
     pthread_t cap_tid;
     int thread_err = pthread_create(&cap_tid, NULL, cap_thread, NULL);
     if (thread_err != 0)
     {
-        fprintf(stderr, "alsa capture thread creation failed: %s\n",
+        log_printf(LOG_LVL_ERROR, "alsa capture thread creation failed: %s",
                 strerror(thread_err));
         return 1;
     }
@@ -628,11 +632,11 @@ int main(int argc, char **argv)
     pthread_mutex_unlock(&cap_state_lock);
     if (state != CAP_READY)
     {
-        fprintf(stderr, "alsa capture failed during startup\n");
+        log_printf(LOG_LVL_ERROR, "alsa capture failed during startup");
         pthread_join(cap_tid, NULL);
         return 1;
     }
-    printf("wake_word: listening (say YES or NO)\n");
+    log_printf(LOG_LVL_INFO, "wake_word: listening (say YES or NO)");
 
     static int16_t window[kWinSamples];
     unsigned rounds = 0;
@@ -643,7 +647,7 @@ int main(int argc, char **argv)
         state = get_capture_state();
         if (state == CAP_FAILED)
         {
-            fprintf(stderr, "alsa capture stopped after an unrecoverable error\n");
+            log_printf(LOG_LVL_ERROR, "alsa capture stopped after an unrecoverable error");
             break;
         }
         if (!ring_snapshot(window))
@@ -651,7 +655,7 @@ int main(int argc, char **argv)
 
         if (!generate_features(window))
         {
-            fprintf(stderr, "feature generation failed\n");
+            log_printf(LOG_LVL_ERROR, "feature generation failed");
             break;
         }
 
@@ -660,7 +664,7 @@ int main(int argc, char **argv)
                     tflite::micro::GetTensorData<int8_t>(in));
         if (speech_interp->Invoke() != kTfLiteOk)
         {
-            fprintf(stderr, "speech invoke failed\n");
+            log_printf(LOG_LVL_ERROR, "speech invoke failed");
             break;
         }
         TfLiteTensor *out = speech_interp->output(0);
@@ -684,7 +688,7 @@ int main(int argc, char **argv)
 
         draw_verdict(kCategoryLabels[best], yes_pct, no_pct);
         rounds++;
-        printf("r%u: rms %d  silence %.2f unknown %.2f yes %.2f no %.2f -> %s\n",
+        log_printf(LOG_LVL_DEBUG, "r%u: rms %d  silence %.2f unknown %.2f yes %.2f no %.2f -> %s",
                rounds, rms, (double)preds[0], (double)preds[1],
                (double)preds[2], (double)preds[3],
                kCategoryLabels[best]);
@@ -696,6 +700,6 @@ int main(int argc, char **argv)
     if (pix18) memset(panel_666, 0, sizeof(panel_666));
     fb_string_t("bye", 60, 120, LCD_WHITE);
     blit();
-    printf("bye\n");
+    log_printf(LOG_LVL_INFO, "bye");
     return 0;
 }

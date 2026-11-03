@@ -23,6 +23,8 @@
 #include "ref/lcd_fonts.h"
 #include "ref/lcd_font_1608.h"
 
+#include "log.h"
+
 static void delay_ms(uint32_t ms) { usleep(ms * 1000); }
 
 /* ---- backlight PWM (JP4.15, pwm1_8ch_0 @ ff170000, rk3506-mini) ----
@@ -76,8 +78,10 @@ static void backlight_set(int percent)
     if (fp) { fprintf(fp, "1"); fclose(fp); }
 }
 
-int main(void)
+int main(int argc, char **argv)
 {
+    log_init("whiteband_test");
+    log_config_from_argv(argc, argv);
     setvbuf(stdout, NULL, _IONBF, 0);
 
     spi_res_open(49);   /* JP4.29 = GPIO1_C1 */
@@ -103,17 +107,17 @@ int main(void)
             LCD_FillRect(0, 0, LCD_Width, 28);
             LCD_SetColor(LCD_WHITE);
             LCD_DisplayString(4, 4, "RGB565 100M uh-1");
-            printf("phase 0: black strip + text\n");
+            log_printf(LOG_LVL_INFO, "phase 0: black strip + text");
             break;
         case 1:
             LCD_SetColor(LCD_WHITE);
             LCD_FillRect(0, 0, LCD_Width, 28);
-            printf("phase 1: WHITE strip\n");
+            log_printf(LOG_LVL_INFO, "phase 1: WHITE strip");
             break;
         case 2:
             LCD_SetColor(LCD_BLACK);
             LCD_FillRect(0, 0, LCD_Width, 28);
-            printf("phase 2: BLACK strip\n");
+            log_printf(LOG_LVL_INFO, "phase 2: BLACK strip");
             break;
         }
         delay_ms(3000);

@@ -25,6 +25,8 @@
 #include "logo64.h"
 #include "spi_hw.h"
 
+#include "log.h"
+
 /* ---- screen layout ---- */
 #define SCREEN_W   320
 #define SCREEN_H   480
@@ -196,7 +198,7 @@ static void fps_update(void)
             LCD_DisplayString(1, (uint16_t)(ANIM_H + 4), buf);
             LCD_ShowTransparent(0);
             if (fps)
-                printf("[fps] %u\n", fps);
+                log_printf(LOG_LVL_DEBUG, "[fps] %u", fps);
         }
     }
 }
@@ -281,7 +283,7 @@ static void gradient_demo(uint32_t ms)
         t = LCD_GetTick() - start;
     } while (t < ms);
 
-    printf("  gradient: %u frames in %u ms = %u fps\n",
+    log_printf(LOG_LVL_INFO, "  gradient: %u frames in %u ms = %u fps",
            frames, t, frames * 1000u / (t ? t : 1));
 }
 
@@ -394,7 +396,7 @@ static void timed_screen(const char *name, void (*fn)(void))
     uint32_t t0 = LCD_GetTick();
 
     fn();
-    printf("  %-6s: %u ms (hold %d s)\n", name, LCD_GetTick() - t0,
+    log_printf(LOG_LVL_INFO, "  %-6s: %u ms (hold %d s)", name, LCD_GetTick() - t0,
            DWELL_MS / 1000);
     delay_ms(DWELL_MS);
 }
@@ -419,10 +421,10 @@ static void info_demo(uint32_t ms, uint8_t invert)
     uint32_t fg = invert ? LCD_BLACK : LCD_WHITE;
     uint32_t bg = invert ? LCD_WHITE : LCD_BLACK;
 
-    printf("[LCD] info%s: pixfmt=RGB565 spi=%u kHz uvc=%s\n",
+    log_printf(LOG_LVL_INFO, "[LCD] info%s: pixfmt=RGB565 spi=%u kHz uvc=%s",
            invert ? " (inverted)" : "", g_speed_khz,
            uvc_host_probe() >= 0 ? "present" : "none");
-    printf("[LCD] info: freq=%lu MHz drive=HW SPI0 (4-wire)\n", mhz);
+    log_printf(LOG_LVL_INFO, "[LCD] info: freq=%lu MHz drive=HW SPI0 (4-wire)", mhz);
 
     LCD_SetAsciiFont(&ASCII_Font16);
     LCD_SetColor(fg);
@@ -493,31 +495,33 @@ static void banner_page(const char *l1, const char *l2,
 /* ---- full pattern set ---- */
 static void run_patterns(void)
 {
-    printf("[LCD] phase: info\n");
+    log_printf(LOG_LVL_INFO, "[LCD] phase: info");
     info_demo(5000, 0);
 
-    printf("[LCD] phase: info (inverted colors)\n");
+    log_printf(LOG_LVL_INFO, "[LCD] phase: info (inverted colors)");
     info_demo(5000, 1);
 
-    printf("[LCD] phase: vendor TEST_STAND (write time + %d s dwell)\n",
+    log_printf(LOG_LVL_INFO, "[LCD] phase: vendor TEST_STAND (write time + %d s dwell)",
            DWELL_MS / 1000);
     TEST_STAND();
 
-    printf("[LCD] phase: gradient\n");
+    log_printf(LOG_LVL_INFO, "[LCD] phase: gradient");
     gradient_demo(1000);
     delay_ms(DWELL_MS);
 
-    printf("[LCD] phase: board boot logo (2x) + caption\n");
+    log_printf(LOG_LVL_INFO, "[LCD] phase: board boot logo (2x) + caption");
     logo_screen();
     delay_ms(DWELL_MS);
 
-    printf("[LCD] phase: scaled font (1x/2x/3x)\n");
+    log_printf(LOG_LVL_INFO, "[LCD] phase: scaled font (1x/2x/3x)");
     scaled_font_screen();
     delay_ms(DWELL_MS);
 }
 
 int main(int argc, char **argv)
 {
+    log_init("lcm_test");
+    log_config_from_argv(argc, argv);
     unsigned speed_khz = g_speed_khz;
 
     setvbuf(stdout, NULL, _IONBF, 0);
@@ -529,19 +533,19 @@ int main(int argc, char **argv)
             {
             case 's': g_speed_khz = (unsigned)atoi(argv[++i]); break;
             default:
-                printf("usage: lcm_test [-s speed_kHz]\n");
+                log_printf(LOG_LVL_INFO, "usage: lcm_test [-s speed_kHz]");
                 return 1;
             }
         }
         else
         {
-            printf("usage: lcm_test [-s speed_kHz]\n");
+            log_printf(LOG_LVL_INFO, "usage: lcm_test [-s speed_kHz]");
             return 1;
         }
     }
 
-    printf("ST7365P 320x480 (MD350), 4-wire SPI mode 0 (hw SPI0 + DC):\n");
-    printf("SCLK=JP4.23 MOSI=JP4.19 CS=JP4.24 DC=JP4.33 RST=JP4.29 "
+    log_printf(LOG_LVL_INFO, "ST7365P 320x480 (MD350), 4-wire SPI mode 0 (hw SPI0 + DC):");
+    log_printf(LOG_LVL_INFO, "SCLK=JP4.23 MOSI=JP4.19 CS=JP4.24 DC=JP4.33 RST=JP4.29 "
            "BLK=JP4.15 (PWM 200 kHz)\n");
 
     backlight_init();
@@ -560,13 +564,13 @@ int main(int argc, char **argv)
         int pct = (loop % 2) ? 11 : 55;
 
         backlight_set(pct);
-        printf("[LCD] loop %d: backlight %d%%\n", loop, pct);
+        log_printf(LOG_LVL_INFO, "[LCD] loop %d: backlight %d%%", loop, pct);
 
-        printf("[LCD] phase: HARDWARE banner\n");
+        log_printf(LOG_LVL_INFO, "[LCD] phase: HARDWARE banner");
         banner_page("now will do", "HW SPI0 test",
                     LCD_BLACK, LCD_CYAN, 3000);
 
-        printf("[LCD] running patterns on HARDWARE SPI0 @ %u MHz\n",
+        log_printf(LOG_LVL_INFO, "[LCD] running patterns on HARDWARE SPI0 @ %u MHz",
                g_speed_khz / 1000);
         run_patterns();
     }

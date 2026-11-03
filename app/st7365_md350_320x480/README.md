@@ -50,6 +50,32 @@ All working apps: SPI0 @ 100 MHz request (93.75 MHz actual), PWM
 backlight 55%, camera auto-detect via the rk3506 USB host
 (`ff780000` -> uh-0).
 
+## Logging
+
+All apps log through the shared module `common/log.c` (syslog-compatible
+levels: debug/info/warning/error; stdio destination by default, optional
+size-rotated file and syslog). Each app reads a `config.json` sitting
+next to its binary:
+
+```json
+{
+  "log_level": "info",
+  "log_destinations": ["stdio"],
+  "log_file": "app.log",
+  "log_file_max_bytes": 1048576,
+  "log_file_keep": 3
+}
+```
+
+- default: `info` level, stdio only - the per-second status chatter
+  (`fps: ...`, `fb avg ...`, per-frame stats) is **debug-level** and
+  hidden; set `"log_level": "debug"` to see it
+- `"log_destinations": ["stdio", "file"]` additionally writes
+  timestamped lines to `log_file`, rotating at `log_file_max_bytes`
+  into `log_file.1` .. `log_file.N` (`log_file_keep` generations)
+- `"syslog"` destination mirrors entries through the standard library
+  `syslog()`
+
 ## Apps
 
 - `lcm_test/` - bring-up demo: banner, info pages, TEST_STAND (write

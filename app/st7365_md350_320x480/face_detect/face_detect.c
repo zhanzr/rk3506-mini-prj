@@ -54,6 +54,8 @@
 #include "ref/lcd_font_1608.h"
 #include "spi_hw.h"
 
+#include "log.h"
+
 #define PANEL_W 320
 #define PANEL_H 480
 #define FPS_BAND 24
@@ -475,14 +477,14 @@ static int cam_open(const char *dev, int *mjpeg, int *w, int *h,
 
     if (pick_format(fd, &pixelformat, &cw, &ch) < 0)
     {
-        fprintf(stderr, "uvc: no YUYV/MJPEG format on the camera\n");
+        log_printf(LOG_LVL_ERROR, "uvc: no YUYV/MJPEG format on the camera");
         quit_req = 1;
         close(fd);
         return -1;
     }
     if (cw != 640 || ch != 480)
     {
-        fprintf(stderr, "uvc: detector requires 640x480; camera offers %dx%d; exiting\n",
+        log_printf(LOG_LVL_ERROR, "uvc: detector requires 640x480; camera offers %dx%d; exiting",
                 cw, ch);
         quit_req = 1;
         close(fd);
@@ -501,7 +503,7 @@ static int cam_open(const char *dev, int *mjpeg, int *w, int *h,
         (pixelformat == V4L2_PIX_FMT_YUYV &&
          fmt.fmt.pix.bytesperline != 640 * 2))
     {
-        fprintf(stderr, "uvc: camera cannot provide the required 640x480 format/stride; exiting\n");
+        log_printf(LOG_LVL_ERROR, "uvc: camera cannot provide the required 640x480 format/stride; exiting");
         quit_req = 1;
         close(fd);
         return -1;
@@ -509,7 +511,7 @@ static int cam_open(const char *dev, int *mjpeg, int *w, int *h,
     if (mjpeg) *mjpeg = pixelformat == V4L2_PIX_FMT_MJPEG;
     if (w) *w = fmt.fmt.pix.width;
     if (h) *h = fmt.fmt.pix.height;
-    printf("uvc: %s at %dx%d %s\n", dev, fmt.fmt.pix.width,
+    log_printf(LOG_LVL_INFO, "uvc: %s at %dx%d %s", dev, fmt.fmt.pix.width,
            fmt.fmt.pix.height,
            pixelformat == V4L2_PIX_FMT_MJPEG ? "MJPEG" : "YUYV");
 
@@ -576,7 +578,7 @@ static int cam_open(const char *dev, int *mjpeg, int *w, int *h,
         perror("uvc: STREAMON");
         goto fail;
     }
-    printf("uvc: streaming on %s\n", dev);
+    log_printf(LOG_LVL_INFO, "uvc: streaming on %s", dev);
 
     *bufs_out = bufs;
     *nbufs_out = (int)req.count;
@@ -744,7 +746,7 @@ static void build_src_map(int cw, int ch)
     map_offx = offx;
     map_offy = offy;
     map_rw = (int)rw;
-    printf("uvc: map built (%dx%d -> %dx%d, scale %.3f)\n",
+    log_printf(LOG_LVL_DEBUG, "uvc: map built (%dx%d -> %dx%d, scale %.3f)",
            cw, ch, PANEL_W, PANEL_H, s);
 }
 
@@ -933,6 +935,8 @@ static void backlight_set(int percent)
 
 int main(int argc, char **argv)
 {
+    log_init("face_detect");
+    log_config_from_argv(argc, argv);
     setvbuf(stdout, NULL, _IONBF, 0);
     signal(SIGINT, on_signal);
     signal(SIGTERM, on_signal);
@@ -977,36 +981,36 @@ int main(int argc, char **argv)
 
         if (arg_err)
         {
-            printf("usage: face_detect [-G gamma_pct] [-S sat_pct] "
+            log_printf(LOG_LVL_INFO, "usage: face_detect [-G gamma_pct] [-S sat_pct] "
                    "[-R full|lim] [-5 RGB565] [-6 RGB666]\n");
             return 1;
         }
     }
     build_gamma_lut();
 
-    printf("stage: transport\n");
+    log_printf(LOG_LVL_INFO, "stage: transport");
     spi_res_open(49);   /* JP4.29 = GPIO1_C1 */
     spi_dc_open(47);    /* JP4.33 = GPIO1_B7 */
     backlight_init();
     backlight_set(55);
     if (spi_open(100 * 1000 * 1000) != 0)
         return 1;
-    printf("stage: LCD_Init\n");
+    log_printf(LOG_LVL_INFO, "stage: LCD_Init");
     LCD_Init();
     LCD_SetAsciiFont(&ASCII_Font16);
     LCD_SetPix18(pix18);
-    printf("stage: COLMOD %s\n", pix18 ? "18-bit (RGB666)" :
+    log_printf(LOG_LVL_INFO, "stage: COLMOD %s", pix18 ? "18-bit (RGB666)" :
                                           "16-bit (RGB565)");
     pthread_t det_tid;
 
     int thread_err = pthread_create(&det_tid, NULL, det_thread, NULL);
     if (thread_err != 0)
     {
-        fprintf(stderr, "detector thread creation failed: %s\n",
+        log_printf(LOG_LVL_ERROR, "detector thread creation failed: %s",
                 strerror(thread_err));
         return 1;
     }
-    printf("stage: face detector (libfacedetection CNN, NEON)\n");
+    log_printf(LOG_LVL_INFO, "stage: face detector (libfacedetection CNN, NEON)");
 
     /* camera lifecycle: absent -> rescan every 2 s ("UVC NA" on screen);
        present -> stream; gone mid-stream -> release + rescan again */
@@ -1033,13 +1037,13 @@ int main(int argc, char **argv)
                 dev = find_uvc(&uh);
                 if (dev)
                 {
-                    printf("uvc: camera at %s (uh-%d)\n", dev, uh);
+                    log_printf(LOG_LVL_INFO, "uvc: camera at %s (uh-%d)", dev, uh);
                     snprintf(band, sizeof(band), "uh-%d", uh < 0 ? 0 : uh);
                     na_shown = 0;
                 }
                 else if (!na_shown)
                 {
-                    printf("uvc: no UVC camera found\n");
+                    log_printf(LOG_LVL_INFO, "uvc: no UVC camera found");
                     draw_text_screen("UVC NA");
                     na_shown = 1;
                 }
@@ -1055,7 +1059,7 @@ int main(int argc, char **argv)
             {
                 if (quit_req)
                     break;
-                fprintf(stderr, "uvc: cam_open failed, rescanning\n");
+                log_printf(LOG_LVL_ERROR, "uvc: cam_open failed, rescanning");
                 free(dev);
                 dev = NULL;
                 rgb_w = rgb_h = 0;
@@ -1075,7 +1079,7 @@ int main(int argc, char **argv)
         {
             if (++timeouts >= 2)
             {
-                fprintf(stderr, "uvc: no frames, releasing camera\n");
+                log_printf(LOG_LVL_ERROR, "uvc: no frames, releasing camera");
                 cam_release(&cam_fd, &bufs, &nbufs);
                 free(dev);
                 dev = NULL;
@@ -1189,7 +1193,7 @@ int main(int argc, char **argv)
             t_end = now;
             snprintf(band, sizeof(band), "uh-%d %u fps %df %ums",
                      uh < 0 ? 0 : uh, fps, nd, det_snapshot_ms);
-            printf("fps: %u  det %d ms  faces %d  fb avg R=%lu G=%lu B=%lu (%s)\n",
+            log_printf(LOG_LVL_DEBUG, "fps: %u  det %d ms  faces %d  fb avg R=%lu G=%lu B=%lu (%s)",
                    fps, det_snapshot_ms, nd, rs / npix, gs / npix, bs / npix,
                    pix18 ? "6-bit/6-bit/6-bit" : "5-bit/6-bit/5-bit");
         }
@@ -1209,6 +1213,6 @@ int main(int argc, char **argv)
     pthread_join(det_tid, NULL);
 
     draw_text_screen("bye");
-    printf("bye\n");
+    log_printf(LOG_LVL_INFO, "bye");
     return 0;
 }

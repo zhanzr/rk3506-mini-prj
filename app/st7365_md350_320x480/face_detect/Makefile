@@ -4,12 +4,14 @@ CXX       = $(TC)/bin/arm-linux-g++
 BOARD     ?= rk3506-buildroot
 BOARD_DIR ?= st7365_md350_320x480/face_detect
 CROSS_FLAGS := -O2 -Wall -Wextra -march=armv7-a+neon-vfpv4 -mfloat-abi=hard -Iinclude -Ivendor
+CROSS_FLAGS += -I../common
 RPATH      := -Wl,-rpath,'$$ORIGIN'/vendor
 TARGET     := face_detect
 DETOBJ     := vendor/facedetect/facedetectcnn.o \
               vendor/facedetect/facedetectcnn-model.o \
               vendor/facedetect/facedetectcnn-data.o \
               det_shim.o
+
 
 all: $(TARGET)
 
@@ -27,11 +29,12 @@ $(TARGET): face_detect.c lcd.c spi_hw.c ref/lcd_fonts.c ref/lcd_font_1608.c $(DE
 	$(CROSS)gcc $(CROSS_FLAGS) -c ref/lcd_font_1608.c -o ref/lcd_font_1608.o
 	$(CXX) $(CROSS_FLAGS) -o $@ face_detect.o lcd.o spi_hw.o \
 		ref/lcd_fonts.o ref/lcd_font_1608.o $(DETOBJ) \
-		$(RPATH) -Lvendor -l:libjpeg.so.8 -lm -lpthread
+		$(RPATH) -Lvendor -l:libjpeg.so.8 ../common/log.o -lm -lpthread
 
 push: $(TARGET)
 	ssh $(BOARD) "mkdir -p $(BOARD_DIR)/vendor"
 	scp -q $(TARGET) $(BOARD):$(BOARD_DIR)/
+	scp -q config.json $(BOARD):$(BOARD_DIR)/
 	scp -q vendor/libjpeg.so.8.2.2 $(BOARD):$(BOARD_DIR)/vendor/
 	run:
 	ssh -t $(BOARD) "cd $(BOARD_DIR) && LD_LIBRARY_PATH=$$PWD/vendor ./$(TARGET)"
@@ -40,3 +43,6 @@ clean:
 	rm -f $(TARGET) *.o ref/*.o
 
 .PHONY: all push run clean
+
+../common/log.o: ../common/log.c ../common/log.h
+	$(CROSS)gcc $(CROSS_FLAGS) -c $< -o $@

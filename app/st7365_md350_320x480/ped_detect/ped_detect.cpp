@@ -37,6 +37,8 @@ extern "C" {
 #include "spi_hw.h"
 #include "lcd_fonts.h"
 #include "lcd_font_1608.h"
+
+#include "log.h"
 }
 
 #define PANEL_W 320
@@ -102,7 +104,7 @@ static void panel_init(void)
     LCD_Clear();
     LCD_SetPix18(pix18);
     panel_ok = 1;
-    printf("panel: MD350 enabled (%s)\n",
+    log_printf(LOG_LVL_INFO, "panel: MD350 enabled (%s)",
            pix18 ? "18-bit RGB666" : "16-bit RGB565");
     fflush(stdout);
 }
@@ -160,7 +162,7 @@ static void build_src_map(int cw, int ch)
             }
         }
     map_s = s; map_offx = offx; map_offy = offy; map_rw = (int)rw;
-    printf("uvc: map built (%dx%d -> %dx%d, scale %.3f)\n",
+    log_printf(LOG_LVL_DEBUG, "uvc: map built (%dx%d -> %dx%d, scale %.3f)",
            cw, ch, PANEL_W, PANEL_H, s);
 }
 
@@ -397,7 +399,7 @@ static int cam_open(char *dev, int *w, int *h,
         fmt.fmt.pix.width != 640 || fmt.fmt.pix.height != 480 ||
         fmt.fmt.pix.bytesperline != 640 * 2)
     {
-        fprintf(stderr, "uvc: detector requires 640x480 YUYV; camera negotiated %ux%u format 0x%08x; exiting\n",
+        log_printf(LOG_LVL_ERROR, "uvc: detector requires 640x480 YUYV; camera negotiated %ux%u format 0x%08x; exiting",
                 fmt.fmt.pix.width, fmt.fmt.pix.height, fmt.fmt.pix.pixelformat);
         quit_req = 1;
         close(cam_fd);
@@ -405,7 +407,7 @@ static int cam_open(char *dev, int *w, int *h,
     }
     *w = fmt.fmt.pix.width;
     *h = fmt.fmt.pix.height;
-    printf("uvc: %s at %dx%d YUYV\n", dev, *w, *h);
+    log_printf(LOG_LVL_INFO, "uvc: %s at %dx%d YUYV", dev, *w, *h);
 
     struct v4l2_requestbuffers req;
     memset(&req, 0, sizeof(req));
@@ -469,7 +471,7 @@ static int cam_open(char *dev, int *w, int *h,
     *obufs = bufs;
     *onbufs = (int)req.count;
     *fd = cam_fd;
-    printf("uvc: streaming on %s\n", dev);
+    log_printf(LOG_LVL_INFO, "uvc: streaming on %s", dev);
     return 0;
 
 fail:
@@ -552,6 +554,8 @@ static void backlight_set(int percent)
 
 int main(int argc, char **argv)
 {
+    log_init("ped_detect");
+    log_config_from_argv(argc, argv);
     setvbuf(stdout, NULL, _IONBF, 0);
     signal(SIGINT, on_signal);
     signal(SIGTERM, on_signal);
@@ -562,7 +566,7 @@ int main(int argc, char **argv)
             pix18 = 1;
         else if (strcmp(argv[i], "-5") != 0)
         {
-            fprintf(stderr, "usage: ped_detect [-6 RGB666]\n");
+            log_printf(LOG_LVL_ERROR, "usage: ped_detect [-6 RGB666]");
             return 1;
         }
     }
@@ -570,19 +574,19 @@ int main(int argc, char **argv)
     panel_init();
     if (!panel_ok)
     {
-        fprintf(stderr, "panel init failed\n");
+        log_printf(LOG_LVL_ERROR, "panel init failed");
         return 1;
     }
 
     hog = new cv::HOGDescriptor();
     hog->setSVMDetector(cv::HOGDescriptor::getDefaultPeopleDetector());
-    printf("stage: HOG people detector (OpenCV %s)\n", CV_VERSION);
+    log_printf(LOG_LVL_INFO, "stage: HOG people detector (OpenCV %s)", CV_VERSION);
 
     pthread_t det_tid;
     int thread_err = pthread_create(&det_tid, NULL, det_thread, NULL);
     if (thread_err != 0)
     {
-        fprintf(stderr, "detector thread creation failed: %s\n",
+        log_printf(LOG_LVL_ERROR, "detector thread creation failed: %s",
                 strerror(thread_err));
         return 1;
     }
@@ -605,7 +609,7 @@ int main(int argc, char **argv)
                 t_scan = now;
                 dev = find_uvc(&uh);
                 if (dev)
-                    printf("uvc: camera at %s (uh-%d)\n", dev, uh);
+                    log_printf(LOG_LVL_INFO, "uvc: camera at %s (uh-%d)", dev, uh);
                 else
                 {
                     memset(panel_fb, 0, sizeof(panel_fb));
@@ -623,7 +627,7 @@ int main(int argc, char **argv)
         {
             if (quit_req)
                 break;
-            fprintf(stderr, "uvc: cam_open failed, rescanning\n");
+            log_printf(LOG_LVL_ERROR, "uvc: cam_open failed, rescanning");
             free(dev);
             dev = NULL;
             scan_msleep();
@@ -644,7 +648,7 @@ int main(int argc, char **argv)
         FD_SET(cam_fd, &fds);
         if (select(cam_fd + 1, &fds, NULL, NULL, &tv) <= 0)
         {
-            fprintf(stderr, "uvc: timeout, rescanning\n");
+            log_printf(LOG_LVL_ERROR, "uvc: timeout, rescanning");
             cam_release(&cam_fd, &bufs, &nbufs);
             free(dev);
             dev = NULL;
@@ -722,7 +726,7 @@ int main(int argc, char **argv)
             fps = frames;
             frames = 0;
             t_end = now;
-            printf("fps: %u  det %d ms  peds %d\n", fps, result_ms, nd);
+            log_printf(LOG_LVL_DEBUG, "fps: %u  det %d ms  peds %d", fps, result_ms, nd);
         }
 
         xioctl(cam_fd, VIDIOC_QBUF, &b);
@@ -741,6 +745,6 @@ int main(int argc, char **argv)
     if (pix18) memset(panel_666, 0, sizeof(panel_666));
     fb_string_t("bye", 60, 120, LCD_WHITE);
     blit();
-    printf("bye\n");
+    log_printf(LOG_LVL_INFO, "bye");
     return 0;
 }

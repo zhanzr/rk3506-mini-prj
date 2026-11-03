@@ -15,6 +15,8 @@
 
 #include "spi_hw.h"
 
+#include "log.h"
+
 static int s_fd = -1;
 static int s_res_fd = -1, s_res_hfd = -1;
 static int s_dc_fd = -1, s_dc_hfd = -1;
@@ -30,7 +32,7 @@ void spi_res_open(int gpio)
     s_res_fd = open(dev, O_RDWR | O_CLOEXEC);
     if (s_res_fd < 0)
     {
-        fprintf(stderr, "open %s: %s\n", dev, strerror(errno));
+        log_printf(LOG_LVL_ERROR, "open %s: %s", dev, strerror(errno));
         exit(1);
     }
     memset(&req, 0, sizeof(req));
@@ -64,7 +66,7 @@ void spi_dc_open(int gpio)
     s_dc_fd = open(dev, O_RDWR | O_CLOEXEC);
     if (s_dc_fd < 0)
     {
-        fprintf(stderr, "open %s: %s\n", dev, strerror(errno));
+        log_printf(LOG_LVL_ERROR, "open %s: %s", dev, strerror(errno));
         exit(1);
     }
     memset(&req, 0, sizeof(req));
@@ -97,7 +99,7 @@ int spi_open(unsigned speed_hz)
     s_fd = open("/dev/spidev0.0", O_RDWR);
     if (s_fd < 0)
     {
-        fprintf(stderr, "open /dev/spidev0.0: %s\n", strerror(errno));
+        log_printf(LOG_LVL_ERROR, "open /dev/spidev0.0: %s", strerror(errno));
         return -1;
     }
     if (ioctl(s_fd, SPI_IOC_WR_MODE, &s_mode) < 0 ||
@@ -107,7 +109,7 @@ int spi_open(unsigned speed_hz)
         perror("spi ioctl");
         return -1;
     }
-    printf("spi0: /dev/spidev0.0 mode %u @ %u Hz (driver may clamp)\n",
+    log_printf(LOG_LVL_INFO, "spi0: /dev/spidev0.0 mode %u @ %u Hz (driver may clamp)",
            s_mode, s_speed);
     return 0;
 }

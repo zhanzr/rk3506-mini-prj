@@ -6,7 +6,9 @@ BOARD_DIR ?= st7365_md350_320x480/wake_word
 RPATH      := -Wl,-rpath,'$$ORIGIN'/vendor
 CROSS_FLAGS := -O2 -Wall -Wextra -march=armv7-a+neon-vfpv4 -mfloat-abi=hard \
                -Iinclude -I. -Iref -I../../vendor/tflm/inc
+CROSS_FLAGS += -I../common
 TARGET     := wake_word
+
 
 all: $(TARGET)
 
@@ -18,11 +20,12 @@ $(TARGET): wake_word.cpp lcd.c spi_hw.c ref/lcd_fonts.c ref/lcd_font_1608.c ../.
 	$(CXX) $(CROSS_FLAGS) -c wake_word.cpp -o wake_word.o
 	$(CXX) $(CROSS_FLAGS) -o $@ wake_word.o lcd.o spi_hw.o \
 		ref/lcd_fonts.o ref/lcd_font_1608.o ../../vendor/tflm/lib/libtensorflow-microlite.a \
-		$(RPATH) -Lvendor -l:libasound.so.2 -lm -lpthread
+		$(RPATH) -Lvendor -l:libasound.so.2 ../common/log.o -lm -lpthread
 
 push: $(TARGET)
 	ssh $(BOARD) "mkdir -p $(BOARD_DIR)/vendor"
 	scp -q $(TARGET) $(BOARD):$(BOARD_DIR)/
+	scp -q config.json $(BOARD):$(BOARD_DIR)/
 	scp -q vendor/libasound.so.2.0.0 $(BOARD):$(BOARD_DIR)/vendor/
 	scp -q audio_preprocessor_int8.tflite micro_speech_quantized.tflite $(BOARD):$(BOARD_DIR)/
 	run:
@@ -32,3 +35,6 @@ clean:
 	rm -f $(TARGET) *.o ref/*.o
 
 .PHONY: all push run clean
+
+../common/log.o: ../common/log.c ../common/log.h
+	$(CROSS)gcc $(CROSS_FLAGS) -c $< -o $@

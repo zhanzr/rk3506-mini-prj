@@ -3,9 +3,12 @@
 TARGET  := ped_detect
 CXX     ?= g++
 CC      ?= gcc
-CFLAGS  := -O2 -Wall -Iref -I/usr/include/opencv4
-CXXFLAGS := -O2 -Wall -Iref -I/usr/include/opencv4
-LIBS    := $(shell PKG_CONFIG_PATH=/usr/lib/arm-linux-gnueabihf/pkgconfig pkg-config --libs opencv4) -lpthread
+CFLAGS  := -O2 -Wall -Iref -I../common -I/usr/include/opencv4
+CXXFLAGS := -O2 -Wall -Iref -I../common -I/usr/include/opencv4
+LIBS    := $(shell PKG_CONFIG_PATH=/usr/lib/arm-linux-gnueabihf/pkgconfig pkg-config --libs opencv4) ../common/log.o -lpthread
+
+../common/log.o: ../common/log.c ../common/log.h
+	$(CC) $(CFLAGS) -c $< -o $@
 
 all: $(TARGET)
 

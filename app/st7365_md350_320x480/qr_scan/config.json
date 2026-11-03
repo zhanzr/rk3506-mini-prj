@@ -1,0 +1,7 @@
+{
+  "log_level": "info",
+  "log_destinations": ["stdio"],
+  "log_file": "qr_scan.log",
+  "log_file_max_bytes": 1048576,
+  "log_file_keep": 3
+}

@@ -42,6 +42,8 @@
 #include "ref/lcd_font_1608.h"
 #include "spi_hw.h"
 
+#include "log.h"
+
 #define PANEL_W 320
 #define PANEL_H 480
 #define STATUS_BAND_H 40
@@ -270,7 +272,7 @@ static int cam_open(const char *dev, int *mjpeg, int *w, int *h,
 
     if (pick_format(fd, &pixelformat, &cw, &ch) < 0)
     {
-        fprintf(stderr, "uvc: no YUYV/MJPEG format on the camera\n");
+        log_printf(LOG_LVL_ERROR, "uvc: no YUYV/MJPEG format on the camera");
         close(fd);
         return -1;
     }
@@ -284,14 +286,14 @@ static int cam_open(const char *dev, int *mjpeg, int *w, int *h,
     if (xioctl(fd, VIDIOC_S_FMT, &fmt) < 0 ||
         fmt.fmt.pix.pixelformat != pixelformat)
     {
-        fprintf(stderr, "uvc: S_FMT rejected the picked format\n");
+        log_printf(LOG_LVL_ERROR, "uvc: S_FMT rejected the picked format");
         close(fd);
         return -1;
     }
     if (mjpeg) *mjpeg = pixelformat == V4L2_PIX_FMT_MJPEG;
     if (w) *w = fmt.fmt.pix.width;
     if (h) *h = fmt.fmt.pix.height;
-    printf("uvc: %s at %dx%d %s\n", dev, fmt.fmt.pix.width,
+    log_printf(LOG_LVL_INFO, "uvc: %s at %dx%d %s", dev, fmt.fmt.pix.width,
            fmt.fmt.pix.height,
            pixelformat == V4L2_PIX_FMT_MJPEG ? "MJPEG" : "YUYV");
 
@@ -349,7 +351,7 @@ static int cam_open(const char *dev, int *mjpeg, int *w, int *h,
         close(fd);
         return -1;
     }
-    printf("uvc: streaming on %s\n", dev);
+    log_printf(LOG_LVL_INFO, "uvc: streaming on %s", dev);
 
     *bufs_out = bufs;
     *nbufs_out = (int)req.count;
@@ -514,12 +516,12 @@ static void build_src_map(int cw, int ch)
             }
         }
 
-    printf("uvc: panel coordinates %dx%d portrait; status band "
+    log_printf(LOG_LVL_INFO, "uvc: panel coordinates %dx%d portrait; status band "
            "%dx%d (y=%d..%d); video viewport %dx%d (y=%d..%d)\n",
            PANEL_W, PANEL_H, PANEL_W, STATUS_BAND_H,
            0, STATUS_BAND_H - 1, PANEL_W, video_h, STATUS_BAND_H,
            PANEL_H - 1);
-    printf("uvc: map %dx%d -> rotated %dx%d, scale %.3f; scaled image "
+    log_printf(LOG_LVL_DEBUG, "uvc: map %dx%d -> rotated %dx%d, scale %.3f; scaled image "
            "%.0fx%.0f, centered crop %.0fpx horizontal into %dx%d viewport\n",
            cw, ch, ch, cw, s, rw * s, rh * s,
            (rw * s - PANEL_W) / 2, PANEL_W, video_h);
@@ -761,6 +763,8 @@ static void backlight_set(int percent)
 
 int main(int argc, char **argv)
 {
+    log_init("uvc_to_lcd");
+    log_config_from_argv(argc, argv);
     setvbuf(stdout, NULL, _IONBF, 0);
     signal(SIGINT, on_signal);
     signal(SIGTERM, on_signal);
@@ -805,26 +809,26 @@ int main(int argc, char **argv)
 
         if (arg_err)
         {
-            printf("usage: uvc_to_lcd [-G gamma_pct] [-S sat_pct] "
+            log_printf(LOG_LVL_INFO, "usage: uvc_to_lcd [-G gamma_pct] [-S sat_pct] "
                    "[-R full|lim] [-5 RGB565] [-6 RGB666]\n");
             return 1;
         }
     }
     build_gamma_lut();
 
-    printf("stage: transport\n");
+    log_printf(LOG_LVL_INFO, "stage: transport");
     spi_res_open(49);  /* JP4.29 = GPIO1_C1 */
     spi_dc_open(47);   /* JP4.33 = GPIO1_B7 */
     backlight_init();
     backlight_set(55); /* video viewing brightness */
-    printf("[LCD] backlight 55%% (PWM 200 kHz)\n");
+    log_printf(LOG_LVL_INFO, "[LCD] backlight 55%% (PWM 200 kHz)");
     if (spi_open(100 * 1000 * 1000) != 0)
         return 1;
-    printf("stage: LCD_Init\n");
+    log_printf(LOG_LVL_INFO, "stage: LCD_Init");
     LCD_Init();
     LCD_SetAsciiFont(&ASCII_Font16);
     LCD_SetPix18(pix18);
-    printf("stage: COLMOD %s\n", pix18 ? "18-bit (RGB666)" :
+    log_printf(LOG_LVL_INFO, "stage: COLMOD %s", pix18 ? "18-bit (RGB666)" :
                                           "16-bit (RGB565)");
 
     /* camera lifecycle: absent -> rescan every 2 s ("UVC NA" on screen);
@@ -852,14 +856,14 @@ int main(int argc, char **argv)
                 dev = find_uvc(&uh);
                 if (dev)
                 {
-                    printf("uvc: camera at %s (uh-%d)\n", dev, uh);
+                    log_printf(LOG_LVL_INFO, "uvc: camera at %s (uh-%d)", dev, uh);
                     snprintf(barbuf, sizeof barbuf, "RGB%s 100M uh-%d",
                              pix18 ? "666" : "565", uh < 0 ? 0 : uh);
                     na_shown = 0;
                 }
                 else if (!na_shown)
                 {
-                    printf("uvc: no UVC camera found\n");
+                    log_printf(LOG_LVL_INFO, "uvc: no UVC camera found");
                     draw_text_screen("UVC NA");
                     na_shown = 1;
                 }
@@ -873,7 +877,7 @@ int main(int argc, char **argv)
             if (cam_open(dev, &cam_mjpeg, &cam_w, &cam_h, &bufs, &nbufs,
                          &cam_fd) < 0)
             {
-                fprintf(stderr, "uvc: cam_open failed, rescanning\n");
+                log_printf(LOG_LVL_ERROR, "uvc: cam_open failed, rescanning");
                 free(dev);
                 dev = NULL;
                 rgb_w = rgb_h = 0;
@@ -893,7 +897,7 @@ int main(int argc, char **argv)
         {
             if (++timeouts >= 2)
             {
-                fprintf(stderr, "uvc: no frames, releasing camera\n");
+                log_printf(LOG_LVL_ERROR, "uvc: no frames, releasing camera");
                 cam_release(&cam_fd, &bufs, &nbufs);
                 free(dev);
                 dev = NULL;
@@ -992,7 +996,7 @@ int main(int argc, char **argv)
                 {
                     fwrite(panel_666, 1, 48 * PANEL_W * 3, d);
                     fclose(d);
-                    printf("dbg: dumped top48\n");
+                    log_printf(LOG_LVL_INFO, "dbg: dumped top48");
                 }
             }
         }
@@ -1004,7 +1008,7 @@ int main(int argc, char **argv)
             {
                 fwrite(panel_666, 1, 48 * PANEL_W * 3, d);
                 fclose(d);
-                printf("dbg: dumped top48\n");
+                log_printf(LOG_LVL_INFO, "dbg: dumped top48");
             }
         }
 
@@ -1039,7 +1043,7 @@ int main(int argc, char **argv)
             frames = 0;
             t_end = now;
             snprintf(band, sizeof(band), "%u fps", fps);
-            printf("fps: %u   fb avg R=%lu G=%lu B=%lu (%s)\n",
+            log_printf(LOG_LVL_DEBUG, "fps: %u   fb avg R=%lu G=%lu B=%lu (%s)",
                    fps, rs / npix, gs / npix, bs / npix,
                    pix18 ? "6-bit/6-bit/6-bit" : "5-bit/6-bit/5-bit");
         }
@@ -1053,6 +1057,6 @@ int main(int argc, char **argv)
     free(dev);
 
     draw_bye_screen();
-    printf("bye\n");
+    log_printf(LOG_LVL_INFO, "bye");
     return 0;
 }

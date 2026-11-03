@@ -32,6 +32,8 @@
 #include "lcd_fonts.h"
 #include "lcd_font_1608.h"
 
+#include "log.h"
+
 /* ---- backlight PWM (JP4.15, pwm1_8ch_0 @ ff170000, rk3506-mini) ----
  * 200 kHz normal polarity, fixed 55% (bright enough to judge detection
  * results). The opz board had BLK hardwired to 3.3 V - no PWM there. */
@@ -174,7 +176,7 @@ static void build_src_map(int cw, int ch)
                 src_map[(py * PANEL_W + px) * 2 + 1] = (int16_t)sy_cam;
             }
         }
-    printf("uvc: map built (%dx%d -> %dx%d, scale %.3f)\n",
+    log_printf(LOG_LVL_DEBUG, "uvc: map built (%dx%d -> %dx%d, scale %.3f)",
            cw, ch, PANEL_W, PANEL_H, s);
 }
 
@@ -370,7 +372,7 @@ static int cam_open(char *dev, int *w, int *h,
     if (xioctl(*fd, VIDIOC_S_FMT, &fmt) != 0) { close(*fd); return -1; }
     *w = fmt.fmt.pix.width;
     *h = fmt.fmt.pix.height;
-    printf("uvc: %s at %dx%d YUYV\n", dev, *w, *h);
+    log_printf(LOG_LVL_INFO, "uvc: %s at %dx%d YUYV", dev, *w, *h);
 
     struct v4l2_requestbuffers req;
     memset(&req, 0, sizeof(req));
@@ -403,7 +405,7 @@ static int cam_open(char *dev, int *w, int *h,
     }
     enum v4l2_buf_type type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
     xioctl(*fd, VIDIOC_STREAMON, &type);
-    printf("uvc: streaming on %s\n", dev);
+    log_printf(LOG_LVL_INFO, "uvc: streaming on %s", dev);
     return 0;
 }
 
@@ -435,7 +437,7 @@ static void panel_init(void)
     LCD_Clear();
     LCD_SetPix18(pix18);
     panel_ok = 1;
-    printf("panel: MD350 enabled (%s)\n",
+    log_printf(LOG_LVL_INFO, "panel: MD350 enabled (%s)",
            pix18 ? "18-bit RGB666" : "16-bit RGB565");
     fflush(stdout);
 }
@@ -449,6 +451,8 @@ static void scan_msleep(void)
 
 int main(int argc, char **argv)
 {
+    log_init("qr_scan");
+    log_config_from_argv(argc, argv);
     setvbuf(stdout, NULL, _IONBF, 0);
     signal(SIGINT, on_signal);
     signal(SIGTERM, on_signal);
@@ -459,7 +463,7 @@ int main(int argc, char **argv)
             pix18 = 1;
         else if (strcmp(argv[i], "-5") != 0)
         {
-            fprintf(stderr, "usage: qr_scan [-6 RGB666]\n");
+            log_printf(LOG_LVL_ERROR, "usage: qr_scan [-6 RGB666]");
             return 1;
         }
     }
@@ -467,7 +471,7 @@ int main(int argc, char **argv)
     panel_init();
     if (!panel_ok)
     {
-        fprintf(stderr, "panel init failed\n");
+        log_printf(LOG_LVL_ERROR, "panel init failed");
         return 1;
     }
 
@@ -484,7 +488,7 @@ int main(int argc, char **argv)
     struct timespec ts;
     double t_end = 0;
 
-    printf("zbar: scanner ready\n");
+    log_printf(LOG_LVL_INFO, "zbar: scanner ready");
 
     while (!quit_req)
     {
@@ -499,7 +503,7 @@ int main(int argc, char **argv)
                 t_scan = now;
                 dev = find_uvc(&uh);
                 if (dev)
-                    printf("uvc: camera at %s (uh-%d)\n", dev, uh);
+                    log_printf(LOG_LVL_INFO, "uvc: camera at %s (uh-%d)", dev, uh);
                 else
                 {
                     memset(panel_fb, 0, sizeof(panel_fb));
@@ -516,7 +520,7 @@ int main(int argc, char **argv)
         if (cam_fd < 0 &&
             cam_open(dev, &cam_w, &cam_h, &bufs, &nbufs, &cam_fd) < 0)
         {
-            fprintf(stderr, "uvc: cam_open failed, rescanning\n");
+            log_printf(LOG_LVL_ERROR, "uvc: cam_open failed, rescanning");
             free(dev);
             dev = NULL;
             scan_msleep();
@@ -539,7 +543,7 @@ int main(int argc, char **argv)
         FD_SET(cam_fd, &fds);
         if (select(cam_fd + 1, &fds, NULL, NULL, &tv) <= 0)
         {
-            fprintf(stderr, "uvc: timeout, rescanning\n");
+            log_printf(LOG_LVL_ERROR, "uvc: timeout, rescanning");
             cam_release(&cam_fd, &bufs, &nbufs);
             free(dev);
             dev = NULL;
@@ -599,7 +603,7 @@ int main(int argc, char **argv)
                     snprintf(last_data, sizeof(last_data), "%s", data);
                     ndecodes++;
                     t_last_log = now_log;
-                    printf("qr[%d]: %s \"%s\"\n", ndecodes,
+                    log_printf(LOG_LVL_INFO, "qr[%d]: %s \"%s\"", ndecodes,
                            zbar_get_symbol_name(typ), data);
                 }
             }
@@ -625,7 +629,7 @@ int main(int argc, char **argv)
             fps = frames;
             frames = 0;
             t_end = now;
-            printf("fps: %u  codes %u\n", fps, ndecodes);
+            log_printf(LOG_LVL_DEBUG, "fps: %u  codes %u", fps, ndecodes);
         }
     }
 
@@ -641,6 +645,6 @@ int main(int argc, char **argv)
         memset(panel_666, 0, sizeof(panel_666));
     fb_string_t("bye", 60, 120, LCD_WHITE);
     blit();
-    printf("bye\n");
+    log_printf(LOG_LVL_INFO, "bye");
     return 0;
 }
