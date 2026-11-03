@@ -32,8 +32,12 @@ The address can still change between boots - if unreachable, rescan with
   **not** done - WSL is the development environment).
 - Serial: DEBUG-TTL header, 115200 8N1 (COM7 on this PC) - rescue access
   when the network is gone.
-- USB1 (Type-C) supports adb (`adb_login.pdf` in the vendor folder) and
-  USB flashing via RKDevTool / DriverAssistant (also in the vendor folder).
+- USB1 (Type-C) supports **adb** - a root shell, file push/pull and TCP
+  forwarding over USB with no network (driver: DriverAssistant; see
+  `docs/usb_adb.md` for the full verified capability list). The same
+  port becomes the Rockchip loader/MaskROM device for RKDevTool
+  firmware flashing; "Switch to Loader" in RKDevTool is reversible with
+  a power cycle.
 
 Vendor docs (PDFs, schematics, SDKs) live in
 `D:\board_database\rk3506-mini` and are **not** part of this repo
