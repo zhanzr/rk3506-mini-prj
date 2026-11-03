@@ -13,11 +13,14 @@ firmware (not exercised by this repo yet).
 
 ## Board connection (verified working)
 
-Ethernet on ETH1 (YT8512C PHY). The stock image brings the interface up with
-**two addresses at once**: vendor static `192.168.1.12` (different subnet,
-not routable from a 192.168.5.x LAN) plus a **DHCP address** on the real
-network. DHCP wins in practice - the board has been seen on
-`192.168.5.196` and `192.168.5.198` (it flips after reboots/lease renewals).
+Ethernet on ETH1 (YT8512C PHY). **Single DHCP address** (fixed): the stock
+image ran two DHCP clients at once - `udhcpc` (ifupdown) and `dhcpcd`
+(S41dhcpcd) - so the router handed out two leases and eth1 carried two
+addresses with confusing drift across reboots. Fix applied on the board
+rootfs (persists): `chmod -x /etc/init.d/S41dhcpcd` (udhcpc remains, with
+the `eth1_static` fallback 192.168.5.211 still available if DHCP fails).
+The address can still change between boots - if unreachable, rescan with
+`tools/find_board.sh 192.168.5`.
 
 - WSL: `~/.ssh/config` has a `rk3506-buildroot` Host alias pointing at the
   current IP; login `root` / password `root`, plus the host key of this
