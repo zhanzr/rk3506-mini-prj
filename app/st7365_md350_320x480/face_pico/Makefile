@@ -4,6 +4,7 @@ CXX       ?= $(TC)/bin/arm-linux-g++
 BOARD     ?= rk3506-buildroot
 BOARD_DIR ?= st7365_md350_320x480/face_pico
 CROSS_FLAGS := -O2 -Wall -Wextra -march=armv7-a+neon-vfpv4 -mfloat-abi=hard -Iinclude -Ivendor
+RPATH      := -Wl,-rpath,'$$ORIGIN'/vendor
 TARGET     := face_pico
 
 all: $(TARGET)
@@ -17,7 +18,7 @@ $(TARGET): face_pico.c lcd.c spi_hw.c ref/lcd_fonts.c ref/lcd_font_1608.c vendor
 	$(CROSS)gcc $(CROSS_FLAGS) -c vendor/pico/picornt.c -o vendor/pico/picornt.o
 	$(CROSS)gcc $(CROSS_FLAGS) -o $@ face_pico.o lcd.o spi_hw.o \
 		ref/lcd_fonts.o ref/lcd_font_1608.o vendor/pico/picornt.o \
-		-Lvendor -l:libjpeg.so.8 -lm -lpthread
+		$(RPATH) -Lvendor -l:libjpeg.so.8 -lm -lpthread
 
 push: $(TARGET)
 	ssh $(BOARD) "mkdir -p $(BOARD_DIR)/vendor"

@@ -4,6 +4,7 @@ CXX       = $(TC)/bin/arm-linux-g++
 BOARD     ?= rk3506-buildroot
 BOARD_DIR ?= st7365_md350_320x480/object_detect
 CROSS_FLAGS := -O2 -Wall -Wextra -march=armv7-a+neon-vfpv4 -mfloat-abi=hard -Iinclude -Ivendor -Ivendor/ncnn/include -Ivendor/ncnn/include/ncnn
+RPATH      := -Wl,-rpath,'$$ORIGIN'/vendor
 TARGET     := object_detect
 
 all: $(TARGET)
@@ -18,7 +19,7 @@ $(TARGET): object_detect.c lcd.c spi_hw.c ref/lcd_fonts.c ref/lcd_font_1608.c yo
 	$(CXX) $(CROSS_FLAGS) -o $@ object_detect.o lcd.o spi_hw.o \
 		ref/lcd_fonts.o ref/lcd_font_1608.o yolo_shim.o \
 		vendor/ncnn/lib/libncnn.a \
-		-Lvendor -l:libgomp.so.1 -l:libjpeg.so.8 -lm -lpthread
+		$(RPATH) -Lvendor -l:libgomp.so.1 -l:libjpeg.so.8 -lm -lpthread
 
 push: $(TARGET)
 	ssh $(BOARD) "mkdir -p $(BOARD_DIR)/vendor"

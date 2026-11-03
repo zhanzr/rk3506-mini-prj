@@ -4,6 +4,7 @@ CXX       = $(TC)/bin/arm-linux-g++
 BOARD     ?= rk3506-buildroot
 BOARD_DIR ?= st7365_md350_320x480/face_detect
 CROSS_FLAGS := -O2 -Wall -Wextra -march=armv7-a+neon-vfpv4 -mfloat-abi=hard -Iinclude -Ivendor
+RPATH      := -Wl,-rpath,'$$ORIGIN'/vendor
 TARGET     := face_detect
 DETOBJ     := vendor/facedetect/facedetectcnn.o \
               vendor/facedetect/facedetectcnn-model.o \
@@ -26,7 +27,7 @@ $(TARGET): face_detect.c lcd.c spi_hw.c ref/lcd_fonts.c ref/lcd_font_1608.c $(DE
 	$(CROSS)gcc $(CROSS_FLAGS) -c ref/lcd_font_1608.c -o ref/lcd_font_1608.o
 	$(CXX) $(CROSS_FLAGS) -o $@ face_detect.o lcd.o spi_hw.o \
 		ref/lcd_fonts.o ref/lcd_font_1608.o $(DETOBJ) \
-		-Lvendor -l:libjpeg.so.8 -lm -lpthread
+		$(RPATH) -Lvendor -l:libjpeg.so.8 -lm -lpthread
 
 push: $(TARGET)
 	ssh $(BOARD) "mkdir -p $(BOARD_DIR)/vendor"

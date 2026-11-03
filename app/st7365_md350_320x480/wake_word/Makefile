@@ -3,6 +3,7 @@ CROSS     ?= $(TC)/bin/arm-linux-
 CXX       = $(TC)/bin/arm-linux-g++
 BOARD     ?= rk3506-buildroot
 BOARD_DIR ?= st7365_md350_320x480/wake_word
+RPATH      := -Wl,-rpath,'$$ORIGIN'/vendor
 CROSS_FLAGS := -O2 -Wall -Wextra -march=armv7-a+neon-vfpv4 -mfloat-abi=hard \
                -Iinclude -I. -Iref -I../../vendor/tflm/inc
 TARGET     := wake_word
@@ -17,7 +18,7 @@ $(TARGET): wake_word.cpp lcd.c spi_hw.c ref/lcd_fonts.c ref/lcd_font_1608.c ../.
 	$(CXX) $(CROSS_FLAGS) -c wake_word.cpp -o wake_word.o
 	$(CXX) $(CROSS_FLAGS) -o $@ wake_word.o lcd.o spi_hw.o \
 		ref/lcd_fonts.o ref/lcd_font_1608.o ../../vendor/tflm/lib/libtensorflow-microlite.a \
-		-Lvendor -l:libasound.so.2 -lm -lpthread
+		$(RPATH) -Lvendor -l:libasound.so.2 -lm -lpthread
 
 push: $(TARGET)
 	ssh $(BOARD) "mkdir -p $(BOARD_DIR)/vendor"

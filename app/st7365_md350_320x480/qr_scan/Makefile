@@ -4,9 +4,10 @@ TARGET    := qr_scan
 TC        ?= $(HOME)/toolchains/arm-buildroot-linux-gnueabihf_sdk-buildroot
 CROSS     ?= $(TC)/bin/arm-linux-
 CROSS_FLAGS := -O2 -Wall -Wextra -march=armv7-a+neon-vfpv4 -mfloat-abi=hard -Iref -Ivendor/zbar_inc
+RPATH      := -Wl,-rpath,'$$ORIGIN'/vendor
 BOARD     ?= rk3506-buildroot
 BOARD_DIR ?= st7365_md350_320x480/qr_scan
-LDLIBS    := -Lvendor -l:libzbar.so.0.3.0 -lm -lpthread
+LDLIBS    := $(RPATH) -Lvendor -l:libzbar.so.0.3.0 -lm -lpthread
 
 all: $(TARGET)
 

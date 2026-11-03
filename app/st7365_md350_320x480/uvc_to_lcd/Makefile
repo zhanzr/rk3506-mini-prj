@@ -2,6 +2,7 @@ TARGET    := uvc_to_lcd
 TC        ?= $(HOME)/toolchains/arm-buildroot-linux-gnueabihf_sdk-buildroot
 CROSS     ?= $(TC)/bin/arm-linux-
 CROSS_FLAGS := -O2 -Wall -Wextra -march=armv7-a -mfpu=neon-vfpv4 -mfloat-abi=hard -Iinclude -Ivendor
+RPATH      := -Wl,-rpath,'$$ORIGIN'/vendor
 BOARD     ?= rk3506-buildroot
 BOARD_DIR ?= st7365_md350_320x480/uvc_to_lcd
 # vendored libjpeg 8.2.2 (IJG, ARM hard-float) - the stock board image
@@ -10,7 +11,7 @@ BOARD_DIR ?= st7365_md350_320x480/uvc_to_lcd
 all: $(TARGET)
 
 $(TARGET): uvc_to_lcd.c lcd.c spi_hw.c ref/lcd_fonts.c ref/lcd_font_1608.c spi_hw.h lcd.h ref/lcd_fonts.h ref/lcd_font_1608.h vendor/libjpeg.so.8
-	$(CROSS)gcc $(CROSS_FLAGS) -o $@ uvc_to_lcd.c lcd.c spi_hw.c ref/lcd_fonts.c ref/lcd_font_1608.c -Lvendor -l:libjpeg.so.8 -lm
+	$(CROSS)gcc $(CROSS_FLAGS) -o $@ uvc_to_lcd.c lcd.c spi_hw.c ref/lcd_fonts.c ref/lcd_font_1608.c $(RPATH) -Lvendor -l:libjpeg.so.8 $(RPATH) -lm
 
 push: $(TARGET)
 	ssh $(BOARD) "mkdir -p $(BOARD_DIR)/vendor"
