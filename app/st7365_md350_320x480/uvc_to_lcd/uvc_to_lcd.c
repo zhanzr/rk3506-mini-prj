@@ -984,33 +984,6 @@ int main(int argc, char **argv)
             }
         }
         frames++;
-        {
-            static int dbg_done;
-
-            if (!dbg_done && fps > 3)
-            {
-                dbg_done = 1;
-                FILE *d = fopen("/tmp/top48.bin", "wb");
-
-                if (d)
-                {
-                    fwrite(panel_666, 1, 48 * PANEL_W * 3, d);
-                    fclose(d);
-                    log_printf(LOG_LVL_INFO, "dbg: dumped top48");
-                }
-            }
-        }
-        if (0)
-        {
-            FILE *d = fopen("/tmp/top48.bin", "wb");
-
-            if (d)
-            {
-                fwrite(panel_666, 1, 48 * PANEL_W * 3, d);
-                fclose(d);
-                log_printf(LOG_LVL_INFO, "dbg: dumped top48");
-            }
-        }
 
         clock_gettime(CLOCK_MONOTONIC, &ts);
         double now = ts.tv_sec + ts.tv_nsec / 1e9;
