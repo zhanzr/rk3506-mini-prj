@@ -17,10 +17,12 @@ Ethernet on ETH1 (YT8512C PHY). **Single DHCP address** (fixed): the stock
 image ran two DHCP clients at once - `udhcpc` (ifupdown) and `dhcpcd`
 (S41dhcpcd) - so the router handed out two leases and eth1 carried two
 addresses with confusing drift across reboots. Fix applied on the board
-rootfs (persists): `chmod -x /etc/init.d/S41dhcpcd` (udhcpc remains, with
-the `eth1_static` fallback 192.168.5.211 still available if DHCP fails).
-The address can still change between boots - if unreachable, rescan with
-`tools/find_board.sh 192.168.5`.
+rootfs (persists): the script was renamed to
+`/etc/init.d/disabled-S41dhcpcd`. Note `chmod -x` does NOT work here -
+this image's `rcS` runs every `S??*` file regardless of the executable
+bit. udhcpc remains (with the `eth1_static` fallback 192.168.5.211 still
+available if DHCP fails). The address can still change between boots -
+if unreachable, rescan with `tools/find_board.sh 192.168.5`.
 
 - WSL: `~/.ssh/config` has a `rk3506-buildroot` Host alias pointing at the
   current IP; login `root` / password `root`, plus the host key of this
@@ -178,6 +180,8 @@ DEBUG-TTL 3-pin: TXD / RXD / GND, 115200 8N1.
 
 ## References
 
+- `docs/ai_ml.md` - AI/ML runtimes on the board (ncnn, TFLM, detectors),
+  measured performance, Python 3.11 + numpy recipe
 - `docs/spi_howto.md` - hardware SPI on JP4, as-built (DTB + kernel
   fragment + userspace transport + panel quirks)
 - Vendor folder: `D:\board_database\rk3506-mini` (schematics, pin lists,
