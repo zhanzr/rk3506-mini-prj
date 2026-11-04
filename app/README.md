@@ -6,7 +6,7 @@ self-contained project with its own `Makefile` and `README.md`.
 | Project | Description |
 |---|---|
 | `hello/` | Minimal hello world - proves the cross toolchain + deploy loop |
-| `blink_hello/` | Hello world + LED2 (`/sys/class/leds/run`, heartbeat) blinker + SoC temperature sampling |
+| `blink_hello/` | SoC temperature monitor - TS-ADC thermal zone, °C output every second (no LED handling) |
 | `coremark/` | EEMBC CoreMark 1.0, ARM and Thumb-2 variants (results in its README) |
 | `m0_bench/` | Standalone Cortex-M0 firmware, Linux runtime loader, GPIO CoreMark runner, and historical vendor-HAL attempt; validated on the live board (see README) |
 | `coremark_multi/` | Multi-core CoreMark verification: per-core round-robin + all-cores-parallel runs, per-core scores + CSV recording (see README) |

@@ -1,42 +1,36 @@
 # blink_hello
 
-First real project for the rk3506-mini: hello world + LED2 blinker.
+First project for the rk3506-mini: reads the SoC temperature and prints
+it in degrees Celsius.
 
 ## Behavior
 
-1. Prints `hello world from rk3506-mini`.
-2. Saves the current trigger of the on-board **LED2** (`/sys/class/leds/run`,
-   normally `heartbeat` - the vendor "system alive" indicator), sets it to
-   `none` and blinks it at 1 Hz (0.5 s on / 0.5 s off) via `brightness`.
-3. Every blink prints the SoC temperature from
-   `/sys/class/thermal/thermal_zone0` (auto-detected; the RK3506G has one
-   thermal zone, ~45 C idle).
-4. On Ctrl-C / SIGTERM it turns the LED off and **restores the saved
-   trigger** (heartbeat comes back), prints `bye`.
+1. Prints `rk3506-mini SoC temperature (TS-ADC via /sys/class/thermal)`.
+2. Every second reads the SoC temperature from the kernel thermal zone
+   (`thermal_zone0`, type `soc-thermal`) and prints it in **°C** with
+   one decimal (the sysfs value is millidegrees; the app divides by
+   1000).
+3. Stops on Ctrl-C / SIGTERM with `bye`.
 
-## Is stealing the heartbeat LED safe?
+The temperature source is the **TS-ADC** (`tsadc@ff650000`,
+compatible `rockchip,rk3506-tsadc`) - the datasheet's "Temperature
+Sensor (TS-ADC), one sensor, -40..125 C, +/-5 C accuracy". The 50 KS/s
+sampling rate is the hardware capability; through the kernel thermal
+framework the readable rate is ~1 Hz (the driver sweeps the sensor
+automatically and the framework exposes the latest conversion). The
+device tree sets a 120 C hardware-shutdown trip (`hw-tshut-temp`).
 
-Yes (verified). LED2 is a `leds-gpio` device with the `heartbeat` trigger -
-purely cosmetic, nothing in the system depends on it. Taking it over stops
-the heartbeat pattern while the app runs; the app restores it on exit, and
-a reboot restores it regardless.
-
-Polarity note: the kernel DT marks this LED **ACTIVE LOW** (`gpio-24 ...
-out lo ACTIVE LOW` in `/sys/kernel/debug/gpio`), so the LED class API
-inverts the physical pin for you. The vendor doc's "high active" claim
-refers to the raw GPIO level, not `brightness`. Use `/sys/class/leds/run`
-and ignore polarity.
+No LED handling: the app never touches `/sys/class/leds/run`, so the
+heartbeat indicator keeps running untouched.
 
 Sample output (stop with Ctrl-C):
 
 ```
-hello world from rk3506-mini (LED2 = /sys/class/leds/run)
-led trigger (saved): none mmc0 timer [heartbeat] backlight gpio rfkill-any rfkill-none rfkill0
-blink 1: led on  soc temp: 46204
-blink 2: led off soc temp: 46204
+rk3506-mini SoC temperature (TS-ADC via /sys/class/thermal)
+soc temp: 42.8 C
+soc temp: 42.8 C
 ...
-^Crestored trigger: heartbeat
-bye
+^Cbye
 ```
 
 ## Build and run
@@ -47,5 +41,6 @@ Fast development loop (cross-build in WSL, push, run):
 make push run
 ```
 
-`CROSS` defaults to `~/toolchains/arm-buildroot-linux-gnueabihf_sdk-buildroot/bin/arm-linux-`;
+`CROSS` defaults to
+`~/toolchains/arm-buildroot-linux-gnueabihf_sdk-buildroot/bin/arm-linux-`;
 override with `make ... CROSS=/path/to/bin/arm-linux-`.

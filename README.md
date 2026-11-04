@@ -84,7 +84,7 @@ rebuilding the rootfs with the full SDK.)
 | App | What it drives | Notes |
 |---|---|---|
 | `app/hello` | - | toolchain smoke test |
-| `app/blink_hello` | LED2 (heartbeat) + SoC temp | LED class API, restores trigger on exit |
+| `app/blink_hello` | SoC temperature monitor (TS-ADC thermal zone, °C output) | reads /sys/class/thermal/thermal_zone0 every second; no LED handling |
 | `app/coremark` | - | A7 CPU benchmark (3x Cortex-A7 @ 1.2 GHz, fixed clock - see `docs/cpu_clock_dvfs.md`) |
 | `app/m0_bench` | GPIO1_C0 | Runtime-loaded M0 liveness and CoreMark (CRC-validated, host-timed 308.71 iterations/s); vendor-HAL experiment kept in the same folder |
 | `app/ssd1317_md066_64x48_iic` | SSD1317 OLED 64x48 on I2C | stock boot logo + scaled stock fonts |
@@ -121,12 +121,12 @@ API. Use the LED class API and polarity never matters.
 
 Stealing the heartbeat is harmless: the trigger is purely cosmetic, no
 system code depends on it, and after a reboot the heartbeat comes back.
-`app/blink_hello` restores the previous trigger on exit anyway.
+`app/blink_hello` (in its current form) does not touch the LED at all.
 
 ## SoC temperature (verified)
 
 `/sys/class/thermal/thermal_zone0/temp` (millidegrees C, read-only),
-~45 C idle. `app/blink_hello` samples it every blink.
+~45 C idle. `app/blink_hello` samples it every second.
 
 This is the chip's **internal TSADC die sensor** (`tsadc@ff650000`,
 `soc-thermal`), trimmed via OTP, with hardware shutdown configured at

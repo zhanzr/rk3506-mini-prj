@@ -1,3 +1,16 @@
+/*
+  blink_hello.c - RK3506-mini SoC temperature monitor.
+
+  Polls the TS-ADC temperature via the kernel thermal zone
+  (/sys/class/thermal/thermal_zone0, type "soc-thermal") and prints it
+  in degrees Celsius. No LED / GPIO / trigger handling.
+
+  The TS-ADC hardware supports up to 50 KS/s sampling, but through the
+  kernel thermal framework the readable rate is ~1 Hz (the driver runs
+  the sensor in automatic sweep mode and the framework caches the
+  value). Datasheet: -40..125 C range, +/-5 C accuracy; the DT sets a
+  120 C hardware shutdown.
+*/
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -5,11 +18,9 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <dirent.h>
-#include <time.h>
 
-#define LED_DIR      "/sys/class/leds/run"
 #define THERMAL_BASE "/sys/class/thermal"
-#define BLINK_US     500000
+#define POLL_SEC     1
 
 static volatile sig_atomic_t g_run = 1;
 
@@ -32,30 +43,6 @@ static int read_file(const char *path, char *buf, size_t size)
 		return -1;
 	buf[n] = '\0';
 	return 0;
-}
-
-static int write_file(const char *path, const char *value)
-{
-	int fd = open(path, O_WRONLY);
-
-	if (fd < 0)
-		return -1;
-	if (write(fd, value, strlen(value)) < 0) {
-		close(fd);
-		return -1;
-	}
-	close(fd);
-	return 0;
-}
-
-/* strip trailing newline, return pointer to static buffer */
-static char *chomp(char *s)
-{
-	size_t n = strlen(s);
-
-	while (n > 0 && (s[n - 1] == '\n' || s[n - 1] == '\r'))
-		s[--n] = '\0';
-	return s;
 }
 
 /* first thermal zone with a readable temp, e.g. /sys/class/thermal/thermal_zone0 */
@@ -84,33 +71,13 @@ static int find_thermal(char *path, size_t size)
 	return -1;
 }
 
-static int led_brightness(int on)
-{
-	return write_file(LED_DIR "/brightness", on ? "1" : "0");
-}
-
 int main(void)
 {
-	char trig_save[128];
 	char thermal[512];
 	char tbuf[64];
-	unsigned long n = 0;
 	int have_thermal;
 
-	printf("hello world from rk3506-mini (LED2 = /sys/class/leds/run)\n");
-
-	if (read_file(LED_DIR "/trigger", trig_save, sizeof(trig_save)) != 0) {
-		fprintf(stderr, "cannot read %s/trigger - LED not available\n",
-			LED_DIR);
-		return 1;
-	}
-	printf("led trigger (saved): %s\n", chomp(trig_save));
-
-	/* take the LED over from the heartbeat trigger */
-	if (write_file(LED_DIR "/trigger", "none") != 0) {
-		fprintf(stderr, "cannot set trigger to none\n");
-		return 1;
-	}
+	printf("rk3506-mini SoC temperature (TS-ADC via %s)\n", THERMAL_BASE);
 
 	signal(SIGINT, on_signal);
 	signal(SIGTERM, on_signal);
@@ -118,40 +85,23 @@ int main(void)
 	have_thermal = (find_thermal(thermal, sizeof(thermal)) == 0);
 
 	while (g_run) {
-		if (led_brightness(n & 1) != 0) {
-			fprintf(stderr, "cannot write brightness\n");
-			break;
-		}
-		n++;
 		if (have_thermal) {
+			double celsius;
 			int ok = (read_file(thermal, tbuf, sizeof(tbuf)) == 0);
-			printf("blink %lu: led %s soc temp: %s", n,
-			       (n & 1) ? "on " : "off",
-			       ok ? tbuf : "n/a\n");
+
+			if (ok) {
+				celsius = strtod(tbuf, NULL) / 1000.0;
+				printf("soc temp: %.1f C\n", celsius);
+			} else {
+				printf("soc temp: read failed\n");
+			}
 		} else {
-			printf("blink %lu: led %s soc temp: not exposed\n",
-			       n, (n & 1) ? "on " : "off");
+			printf("soc temp: not exposed\n");
 		}
 		fflush(stdout);
-		usleep(BLINK_US);
+		sleep(POLL_SEC);
 	}
 
-	/* restore what the system had before we touched it */
-	led_brightness(0);
-	write_file(LED_DIR "/trigger", "none");
-	/* re-apply the saved trigger (e.g. "heartbeat") */
-	{
-		char *t = trig_save;
-		/* trigger file lists all triggers, active one in [brackets] */
-		char *b = strchr(t, '[');
-		char *e = b ? strchr(b, ']') : NULL;
-
-		if (b && e) {
-			*e = '\0';
-			write_file(LED_DIR "/trigger", b + 1);
-			printf("restored trigger: %s\n", b + 1);
-		}
-	}
 	printf("bye\n");
 	return 0;
 }

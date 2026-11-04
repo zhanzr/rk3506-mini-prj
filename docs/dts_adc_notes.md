@@ -49,6 +49,14 @@ Notes:
   `#thermal-sensor-cells = <1>`,
   trim data from OTP (`cpu_tsadc_trim_l/h`),
   `rockchip,hw-tshut-temp = <120000>` (120 C hardware shutdown).
+
+- Kernel usage (verified 2026-11-04): `/sys/class/thermal/thermal_zone0`
+  (type `soc-thermal`) is driven by this TSADC - it is the temperature
+  source used by `app/blink_hello`. The datasheet's 50 KS/s is the
+  hardware sampling capability; through the thermal framework the
+  readable rate is ~1 Hz (the driver sweeps the sensor automatically
+  and exposes the latest conversion; `blink_hello` reads it every
+  second). Datasheet accuracy: +/-5 C over -40..125 C.
 - Userspace: `/sys/class/thermal/thermal_zone0`, `type = soc-thermal`,
   `temp` in millidegrees C (~45000 idle). This is what `blink_hello`
   reads. Die sensor only - not usable for external signals.
