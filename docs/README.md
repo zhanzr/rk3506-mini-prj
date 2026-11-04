@@ -7,6 +7,7 @@ Setup and design notes for the rk3506-mini project.
 | `dts_adc_notes.md` | Verified device-tree structure (rk3506.dtsi / rk3502.dtsi, vanxoak board dts), TSADC die sensor, SARADC wiring (jumpers only, no external channels), CPU clock facts (3x A7 fixed 1.2 GHz, no cpufreq) |
 | `cpu_clock_dvfs.md` | Why the board runs at 1.2 GHz although the datasheet claims 1.5 GHz: vendor DTS never enables the PWM behind vdd_arm (CPU regulator), rockchip-cpufreq fails at boot and gives up; OPP table / chip grade details; fix sketch + risks |
 | `amp_m0_notes.md` | RK3506 M0 bring-up: runtime Linux loader, GPIO liveness test, and standalone CoreMark reporting without reflashing; current image still lacks boot-time AMP and RPMsg integration |
+| `rockchip_test.md` | /rockchip-test suite inventory: 6 modules runnable now (DDR, camera-USB/v4l2, flash, audio-capture, CPU-substitute, auto-reboot), 11 not applicable on this board (no GPU/NPU/PCIe/WiFi/RTC/recovery) |
 | `camera_input.md` | Camera options: UVC (proven), FlexBus CIF DVP path (kernel status, sensor drivers), MIPI CSI absent, FlexBus-on-JP4 infeasibility analysis |
 | `spi_panel_gui.md` | SPI-panel FPS analysis (93.75 MHz ceiling, spidev bufsiz lever, partial updates), touch+GUI options (LVGL/Qt/fbdev routes) |
 | `graphics_stack_notes.md` | Verified graphics stack: no desktop/WM, LVGL 9.1-on-DRM via RKADK, stock fonts/icons inventory (LVGL built-ins, SmileySans TTF, boot logos), what the 7" MIPI screen shows on stock boot (static logo only - all boot hooks verified) |
