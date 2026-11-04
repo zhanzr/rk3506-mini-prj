@@ -1,11 +1,9 @@
 # coremark
 
-EEMBC CoreMark 1.0 benchmark, ported from `pbeagle_prj/app/coremark`
-(PocketBeagle, itself from an STM32MP157 reference). Upstream CoreMark
-sources + the `linux` port (`linux/core_portme.*`, POSIX timers, heap
-memory) are used unchanged; the port work is the build configuration:
-Cortex-A7 target and this repository's board/transfer workflow. See
-`LICENSE.md` (Apache 2.0).
+EEMBC CoreMark 1.0 benchmark. Upstream CoreMark sources plus the `linux`
+port (`linux/core_portme.*`, POSIX timers, heap memory) are used unchanged;
+the port work is the build configuration: Cortex-A7 target and this
+repository's board/transfer workflow. See `LICENSE.md` (Apache 2.0).
 
 Two instruction-set variants are built:
 
@@ -29,7 +27,9 @@ make size            # text/data/bss sizes
 ```
 
 Runs are pinned with `taskset -c 0`. Board clock is fixed at 1.2 GHz (no
-cpufreq), see `docs/dts_adc_notes.md` - no governor interference.
+cpufreq), see `docs/dts_adc_notes.md` - no governor interference. For
+multi-core verification (per-core round-robin and all-cores-parallel
+runs), see `../coremark_multi/`.
 
 ## Results - rk3506-mini (3x Cortex-A7 @ 1.2 GHz, single core, fixed clock)
 
@@ -43,13 +43,10 @@ Validated runs (CRC checked correct), 60000 iterations each, GCC 12.4.0
 
 Observations:
 
-- ~3.9 CoreMark/MHz, in line with published Cortex-A7 figures and clearly
-  above the PocketBeagle's Cortex-A8 (3.07-3.11 CM/MHz @ 1 GHz,
-  same 40000-iteration methodology).
-- On this board ARM (A32) edged out Thumb-2 by ~1.4 % - opposite of the
-  PocketBeagle A8 (Thumb-2 +1.3 % there) and the MP157 A7 reference
-  (Thumb-2 +0.5 %). The difference is small; both directions have been
-  seen on A7, likely LTO/code-layout luck. Thumb-2 remains ~19 % denser.
+- ~3.9 CoreMark/MHz, in line with published Cortex-A7 figures.
+- On this board ARM (A32) edged out Thumb-2 by ~1.4 % - the difference is
+  small; both directions have been seen on A7, likely LTO/code-layout luck.
+  Thumb-2 remains ~19 % denser.
 - SoC temperature stayed at ~45.6 -> 46.8 C during the runs (one core of
   three busy, no thermal throttling exists on this image - clock is fixed).
 - Pure single-ISA binaries are not feasible: glibc/crt objects carry their
@@ -57,4 +54,4 @@ Observations:
   final ELFs), same as on the other boards. The build flags guarantee the
   ISA of all project compilation units, which dominate the hot path.
 - 3 cores available but CoreMark here is single-core (standard rules);
-  with 3 parallel instances the board should scale ~3x if ever needed.
+  multi-core verification lives in `../coremark_multi/`.
