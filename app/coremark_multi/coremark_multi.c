@@ -254,7 +254,7 @@ static void parallel_run(int loops, const char *csv)
         double scores[MAX_CPUS];
         int crc[MAX_CPUS];
         unsigned long it[MAX_CPUS];
-        double t0, t1, total = 0.0;
+        double t0, t1;
         int c, ok_count = 0;
 
         printf("-- loop %d/%d --\n", loop, loops);
@@ -282,7 +282,6 @@ static void parallel_run(int loops, const char *csv)
                 continue;
             if (crc[c])
                 ok_count++;
-            total += scores[c];
             record_csv(csv, "par", loop, g_cpus[c], it[c], t1 - t0,
                        scores[c], crc[c]);
             printf("  cpu%d: %.2f CoreMark/s (%s, %lu iters)\n",
@@ -290,9 +289,8 @@ static void parallel_run(int loops, const char *csv)
                    it[c]);
             unlink(outfiles[c]);
         }
-        printf("  wall time %.2f s | combined %.1f CoreMark/s | "
-               "CRC ok %d/%d | SoC %.1f C\n",
-               t1 - t0, total, ok_count, g_ncpus, cpu_temp_c());
+        printf("  wall time %.2f s | CRC ok %d/%d | SoC %.1f C\n",
+               t1 - t0, ok_count, g_ncpus, cpu_temp_c());
     }
 }
 

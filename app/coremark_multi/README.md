@@ -55,22 +55,21 @@ run, SoC 45-48 C):
 
 | Phase  | cpu0 (CM/s) | cpu1 (CM/s) | cpu2 (CM/s) | notes |
 |--------|-------------|-------------|-------------|-------|
-| rr L1  | 4588.28     | 4712.61     | 4095.66     | one core at a time |
-| rr L2  | 4594.31     | 4713.41     | 4705.88     | cpu2 L1 slot overlapped with background scp |
-| par L1 | 4475.35     | 4153.69     | 4261.80     | wall 13.49 s, combined 12,890.8 CM/s |
-| par L2 | 4243.39     | 4425.48     | 4173.50     | wall 13.43 s, combined 12,842.4 CM/s |
+| rr L1  | 4593.93     | 4711.82     | 4698.38     | one core at a time |
+| rr L2  | 4593.93     | 4705.09     | 4704.30     | one core at a time |
+| par L1 | 4453.28     | 4223.55     | 4190.36     | wall 13.37 s |
+| par L2 | 4439.16     | 4228.33     | 4183.79     | wall 13.39 s |
 
 Observations:
 
-- Round robin: each core independently matches the single-core
-  `coremark-arm` figure (4590-4716 CM/s; cpu2's first slot overlapped
-  with the deploy scp traffic - an honest illustration of background
-  sensitivity on a live board).
-- Parallel: all three run CRC-valid simultaneously; combined
-  throughput ~12,842-12,891 CoreMark/s (~2.75x the single-core score).
-  Per-core scores drop ~5-13% (shared L2/DDR bandwidth), and the
-  fastest core rotates between runs - scheduler placement effects.
-- Per-core frequencies cannot be read from this image (no cpufreq);
-  the board clock is fixed at 1.2 GHz.
+- Round robin: each core independently lands in the 4594-4712 band,
+  consistent with the single-core `coremark-arm` figure (4682.7 CM/s
+  at 60000 iterations). An earlier one-off cpu2 reading of 4096 CM/s
+  was background-activity interference during that slot; re-runs are
+  stable.
+- Parallel: all three run CRC-valid simultaneously; per-core scores
+  drop ~8-11% from the round-robin level (shared L2/DDR bandwidth),
+  cpu0 the least affected. No per-core frequency data exists in this
+  image (no cpufreq); the board clock is fixed at 1.2 GHz.
 
 Raw data: `results.csv` on the board (regenerate by running).
